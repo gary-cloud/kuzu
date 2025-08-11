@@ -7,61 +7,47 @@ using namespace function;
 using namespace common;
 
 GrapharScanSharedState::GrapharScanSharedState(
-    graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection,
-    graphar::VertexIter vertex_iter)
-    : maybe_vertices_collection{std::move(maybeVerticesCollection)},
-      vertex_iter{std::move(vertex_iter)} {
+    graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection)
+    : maybe_vertices_collection{std::move(maybeVerticesCollection)} {
         vertices_count = maybe_vertices_collection.value()->size();
+        next_index.store(0);
 }
 
-std::unique_ptr<TableFuncSharedState> iniGrapharScanSharedState(
+std::unique_ptr<TableFuncSharedState> initGrapharScanSharedState(
     const TableFuncInitSharedStateInput& input) {
     auto grapharScanBindData = input.bindData->constPtrCast<GrapharScanBindData>();
     auto maybe_vertices_collection = 
         graphar::VerticesCollection::Make(grapharScanBindData->graph_info, grapharScanBindData->table_name);
-    auto vertex_iter = maybe_vertices_collection.value()->begin();
-    return std::make_unique<graphar_extension::GrapharScanSharedState>(std::move(maybe_vertices_collection), std::move(vertex_iter));
+    return std::make_unique<graphar_extension::GrapharScanSharedState>(std::move(maybe_vertices_collection));
 }
 
 offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto grapharSharedState = input.sharedState->ptrCast<graphar_extension::GrapharScanSharedState>();
     auto grapharScanBindData = input.bindData->constPtrCast<graphar_extension::GrapharScanBindData>();
 
-    auto& column_names = grapharScanBindData->column_names;
     auto& column_setters = grapharScanBindData->column_setters;
     auto vertices = grapharSharedState->maybe_vertices_collection.value();
     size_t vertices_count = grapharSharedState->vertices_count;
 
-    uint64_t count = 0;
-    // iterate through vertices collection
-    for (auto &it = grapharSharedState->vertex_iter; it != vertices->end(); ++it) {
-        if (count >= 100) {
-            break;
-        }
+    // Reserve a batch of indices atomically
+    // const size_t batch = DEFAULT_VECTOR_CAPACITY;
+    const size_t batch = 100;
+    size_t start = grapharSharedState->next_index.fetch_add(batch, std::memory_order_relaxed);
+    if (start >= vertices_count) {
+        // no more rows
+        output.dataChunk.state->getSelVectorUnsafe().setSelSize(0);
+        return 0;
+    }
+    size_t end = std::min(start + batch, vertices_count);
 
-        // int64_t id = it.property<int64_t>("id").value();
-        // std::string firstName = it.property<std::string>("firstName").value();
-        // std::string lastName = it.property<std::string>("lastName").value();
-        // std::string gender = it.property<std::string>("gender").value();
-
-        // output.dataChunk.getValueVectorMutable(grapharScanBindData->getFieldIdx("id"))
-        //                 .setValue(count, id);
-        // output.dataChunk.getValueVectorMutable(grapharScanBindData->getFieldIdx("firstName"))
-        //                 .setValue(count, firstName);
-        // output.dataChunk.getValueVectorMutable(grapharScanBindData->getFieldIdx("lastName"))
-        //                 .setValue(count, lastName);
-        // output.dataChunk.getValueVectorMutable(grapharScanBindData->getFieldIdx("gender"))
-        //                 .setValue(count, gender);
-
-        // TODO
-        // for (const auto& column_name : column_names) {
-        //     output.dataChunk.getValueVectorMutable(grapharScanBindData->getFieldIdx(column_name))
-        //                     .setValue(count, it.property<xxx>(column_name).value());
-        // }
+    idx_t count = 0;
+    for (size_t idx = start; idx < end; ++idx) {
+        // create a local iterator for this index (each worker/thread has its own local iterator)
+        auto it = vertices->begin() + idx;
 
         // Complete all column writes using the setter generated in the bind stage (without switch)
         for (size_t ci = 0; ci < column_setters.size(); ++ci) {
-            column_setters[ci](it, output, (idx_t)count);
+            column_setters[ci](it, output, count);
         }
 
         count++;
@@ -75,7 +61,7 @@ function_set GrapharScanFunction::getFunctionSet() {
     auto function = std::make_unique<TableFunction>(name, std::vector{LogicalTypeID::STRING});
     function->tableFunc = tableFunc;
     function->bindFunc = bindFunc;
-    function->initSharedStateFunc = iniGrapharScanSharedState;
+    function->initSharedStateFunc = initGrapharScanSharedState;
     function->initLocalStateFunc = TableFunction::initEmptyLocalState;
     functionSet.push_back(std::move(function));
     return functionSet;

@@ -57,19 +57,13 @@ static void autoDetectSchema([[maybe_unused]] main::ClientContext* context, std:
         throw BinderException("GraphAr's Type " + table_name + " does not exist.");
     }
 
-    // TODO: Construct the types and names from the vertex info.
+    // Construct the types and names from the vertex info.
     for (auto& property_group : vertex_info->GetPropertyGroups()) {
         for (const auto& property : property_group->GetProperties()) {
             names.push_back(property.name);
             types.push_back(GrapharTypeToKuzuTypeFunc(property.type->id()));
         }
     }
-
-    // names = {"id", "firstName", "lastName", "gender"};
-    // types.push_back(LogicalType::INT64());
-    // types.push_back(LogicalType::STRING());
-    // types.push_back(LogicalType::STRING());
-    // types.push_back(LogicalType::STRING());
 }
 
 GrapharScanBindData::GrapharScanBindData(binder::expression_vector columns, common::FileScanInfo fileScanInfo, main::ClientContext* context,
@@ -148,7 +142,7 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     // } else {
     //     autoDetectSchema(context, graph_info, table_name, column_types, column_names);
     // }
-    
+
     KU_ASSERT(column_types.size() == column_names.size());
     
     column_names =

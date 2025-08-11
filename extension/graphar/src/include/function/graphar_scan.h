@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <atomic> 
 
 #include "binder/binder.h"
 #include "binder/binder.h"
@@ -74,11 +75,10 @@ struct GrapharScanBindData final : function::ScanFileBindData {
 
 struct GrapharScanSharedState : public function::TableFuncSharedState {
     graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybe_vertices_collection;
-    graphar::VertexIter vertex_iter;
+    std::atomic<size_t> next_index{0};
     size_t vertices_count;
 
-    GrapharScanSharedState(graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection, 
-        graphar::VertexIter vertex_iter);
+    GrapharScanSharedState(graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection);
 };
 
 // Functions and structs exposed for use

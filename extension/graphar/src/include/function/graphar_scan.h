@@ -1,7 +1,10 @@
 #pragma once
 
+#include <functional>
+
 #include "binder/binder.h"
 #include "binder/binder.h"
+#include "common/types/types.h"
 #include "common/case_insensitive_map.h"
 #include "common/copy_constructors.h"
 #include "common/exception/binder.h"
@@ -26,6 +29,8 @@ struct GrapharScanFunction {
     static function::function_set getFunctionSet();
 };
 
+// The setter for each column: Write the value of the current vertexIter in this column to the corresponding ValueVector of output at row.
+using ColumnSetter = std::function<void(graphar::VertexIter&, function::TableFuncOutput&, kuzu::common::idx_t)>;
 using column_name_idx_map_t = std::unordered_map<std::string, uint64_t>;
 
 class KuzuColumnInfo {
@@ -45,17 +50,22 @@ struct GrapharScanBindData final : function::ScanFileBindData {
     std::shared_ptr<KuzuColumnInfo> column_info;
     std::string table_name;
     std::vector<std::string> column_names;
+    std::vector<kuzu::common::LogicalType> column_types;
+    std::vector<ColumnSetter> column_setters;
     
     uint64_t getFieldIdx(std::string fieldName) const { return column_info->getFieldIdx(fieldName); }
 
     GrapharScanBindData(binder::expression_vector columns, common::FileScanInfo fileScanInfo, main::ClientContext* context,
-        std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name, std::vector<std::string> column_names);
+        std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name, std::vector<std::string> column_names,
+        std::vector<kuzu::common::LogicalType> column_types);
 
     GrapharScanBindData(const GrapharScanBindData& other) 
         : ScanFileBindData(other),
           graph_info(other.graph_info),
           column_info(other.column_info),
-          table_name(other.table_name) {}
+          table_name(other.table_name), 
+          column_types(copyVector(other.column_types)),
+          column_setters(other.column_setters) {}
 
     std::unique_ptr<TableFuncBindData> copy() const override {
         return std::make_unique<GrapharScanBindData>(*this);

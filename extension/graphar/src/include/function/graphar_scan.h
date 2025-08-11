@@ -3,6 +3,7 @@
 #include <functional>
 #include <atomic> 
 
+#include "main/client_context.h"
 #include "binder/binder.h"
 #include "binder/binder.h"
 #include "common/types/types.h"
@@ -53,6 +54,7 @@ struct GrapharScanBindData final : function::ScanFileBindData {
     std::vector<std::string> column_names;
     std::vector<kuzu::common::LogicalType> column_types;
     std::vector<ColumnSetter> column_setters;
+    uint64_t max_threads;
     
     uint64_t getFieldIdx(std::string fieldName) const { return column_info->getFieldIdx(fieldName); }
 
@@ -66,7 +68,8 @@ struct GrapharScanBindData final : function::ScanFileBindData {
           column_info(other.column_info),
           table_name(other.table_name), 
           column_types(copyVector(other.column_types)),
-          column_setters(other.column_setters) {}
+          column_setters(other.column_setters),
+          max_threads(other.max_threads) {}
 
     std::unique_ptr<TableFuncBindData> copy() const override {
         return std::make_unique<GrapharScanBindData>(*this);
@@ -77,8 +80,9 @@ struct GrapharScanSharedState : public function::TableFuncSharedState {
     graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybe_vertices_collection;
     std::atomic<size_t> next_index{0};
     size_t vertices_count;
+    size_t batch_size;
 
-    GrapharScanSharedState(graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection);
+    GrapharScanSharedState(graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection, uint64_t max_threads);
 };
 
 // Functions and structs exposed for use

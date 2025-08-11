@@ -7,9 +7,10 @@ using namespace function;
 using namespace common;
 
 GrapharScanSharedState::GrapharScanSharedState(
-    graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection)
+    graphar::Result<std::shared_ptr<graphar::VerticesCollection>> maybeVerticesCollection, uint64_t max_threads)
     : maybe_vertices_collection{std::move(maybeVerticesCollection)} {
         vertices_count = maybe_vertices_collection.value()->size();
+        batch_size = max_threads % vertices_count == 0 ? vertices_count / max_threads : vertices_count / max_threads + 1;
         next_index.store(0);
 }
 
@@ -18,7 +19,7 @@ std::unique_ptr<TableFuncSharedState> initGrapharScanSharedState(
     auto grapharScanBindData = input.bindData->constPtrCast<GrapharScanBindData>();
     auto maybe_vertices_collection = 
         graphar::VerticesCollection::Make(grapharScanBindData->graph_info, grapharScanBindData->table_name);
-    return std::make_unique<graphar_extension::GrapharScanSharedState>(std::move(maybe_vertices_collection));
+    return std::make_unique<graphar_extension::GrapharScanSharedState>(std::move(maybe_vertices_collection), grapharScanBindData->max_threads);
 }
 
 offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
@@ -28,17 +29,16 @@ offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto& column_setters = grapharScanBindData->column_setters;
     auto vertices = grapharSharedState->maybe_vertices_collection.value();
     size_t vertices_count = grapharSharedState->vertices_count;
+    size_t batch_size = grapharSharedState->batch_size;
 
     // Reserve a batch of indices atomically
-    // const size_t batch = DEFAULT_VECTOR_CAPACITY;
-    const size_t batch = 100;
-    size_t start = grapharSharedState->next_index.fetch_add(batch, std::memory_order_relaxed);
+    size_t start = grapharSharedState->next_index.fetch_add(batch_size, std::memory_order_relaxed);
     if (start >= vertices_count) {
         // no more rows
         output.dataChunk.state->getSelVectorUnsafe().setSelSize(0);
         return 0;
     }
-    size_t end = std::min(start + batch, vertices_count);
+    size_t end = std::min(start + batch_size, vertices_count);
 
     idx_t count = 0;
     for (size_t idx = start; idx < end; ++idx) {

@@ -81,6 +81,7 @@ GrapharScanBindData::GrapharScanBindData(binder::expression_vector columns, comm
                 }
                 this->column_setters.push_back(it->second(fieldIdx, this->column_names[i]));
             }
+            this->max_threads = context->getMaxNumThreadForExec();
         }
 
 KuzuColumnInfo::KuzuColumnInfo(std::vector<std::string> column_names) {

@@ -8,8 +8,9 @@ namespace graphar_extension {
 using namespace function;
 using namespace common;
 
+// Vertex setter maker (same as original)
 template<typename T>
-ColumnSetter makeTypedSetter(uint64_t fieldIdx, std::string colName) {
+VertexColumnSetter makeTypedVertexSetter(uint64_t fieldIdx, std::string colName) {
     return [fieldIdx, colName = std::move(colName)](graphar::VertexIter& it, function::TableFuncOutput& output, kuzu::common::idx_t row) {
         auto res = it.property<T>(colName);
         auto &vec = output.dataChunk.getValueVectorMutable(fieldIdx);
@@ -17,14 +18,71 @@ ColumnSetter makeTypedSetter(uint64_t fieldIdx, std::string colName) {
     };
 }
 
-static const std::unordered_map<LogicalTypeID, std::function<ColumnSetter(uint64_t, std::string)>> setterFactory = {
-    { LogicalTypeID::INT64,   [](uint64_t idx, std::string col){ return makeTypedSetter<int64_t>(idx, std::move(col)); } },
-    { LogicalTypeID::INT32,   [](uint64_t idx, std::string col){ return makeTypedSetter<int32_t>(idx, std::move(col)); } },
-    { LogicalTypeID::DOUBLE,  [](uint64_t idx, std::string col){ return makeTypedSetter<double>(idx, std::move(col)); } },
-    { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeTypedSetter<float>(idx, std::move(col)); } },
-    { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeTypedSetter<std::string>(idx, std::move(col)); } },
-    { LogicalTypeID::BOOL,    [](uint64_t idx, std::string col){ return makeTypedSetter<bool>(idx, std::move(col)); } },
-    // DATE / TIMESTAMP may need custom conversion logic — handle explicitly if graphar returns non-native types.
+// Edge setter maker for properties
+template<typename T>
+EdgeColumnSetter makeTypedEdgeSetter(uint64_t fieldIdx, std::string colName) {
+    return [fieldIdx, colName = std::move(colName)](graphar::EdgeIter& it, function::TableFuncOutput& output, kuzu::common::idx_t row, [[maybe_unused]] std::shared_ptr<graphar::VerticesCollection> unused) {
+        auto res = it.property<T>(colName);
+        auto &vec = output.dataChunk.getValueVectorMutable(fieldIdx);
+        vec.setValue(row, res.value());
+    };
+}
+
+// Edge setter for "from" (source) and "to" (destination)
+template<typename T>
+EdgeColumnSetter makeFromSetter(uint64_t fieldIdx, std::string colName) {
+    return [fieldIdx, colName = std::move(colName)](graphar::EdgeIter& it, function::TableFuncOutput& output, kuzu::common::idx_t row, std::shared_ptr<graphar::VerticesCollection> from_vertices) {
+        graphar::IdType src = it.source();
+        auto vertex_it = from_vertices->find(src);
+        auto res = vertex_it.property<T>(colName);
+        auto &vec = output.dataChunk.getValueVectorMutable(fieldIdx);
+        vec.setValue(row, res.value());
+    };
+}
+
+template<typename T>
+EdgeColumnSetter makeToSetter(uint64_t fieldIdx, std::string colName) {
+    return [fieldIdx, colName = std::move(colName)](graphar::EdgeIter& it, function::TableFuncOutput& output, kuzu::common::idx_t row, std::shared_ptr<graphar::VerticesCollection> to_vertices) {
+        graphar::IdType dst = it.destination();
+        auto vertex_it = to_vertices->find(dst);
+        auto res = vertex_it.property<T>(colName);
+        auto &vec = output.dataChunk.getValueVectorMutable(fieldIdx);
+        vec.setValue(row, res.value());
+    };
+}
+
+static const std::unordered_map<LogicalTypeID, std::function<VertexColumnSetter(uint64_t, std::string)>> vertexSetterFactory = {
+    { LogicalTypeID::INT64,   [](uint64_t idx, std::string col){ return makeTypedVertexSetter<int64_t>(idx, std::move(col)); } },
+    { LogicalTypeID::INT32,   [](uint64_t idx, std::string col){ return makeTypedVertexSetter<int32_t>(idx, std::move(col)); } },
+    { LogicalTypeID::DOUBLE,  [](uint64_t idx, std::string col){ return makeTypedVertexSetter<double>(idx, std::move(col)); } },
+    { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeTypedVertexSetter<float>(idx, std::move(col)); } },
+    { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeTypedVertexSetter<std::string>(idx, std::move(col)); } },
+    { LogicalTypeID::BOOL,    [](uint64_t idx, std::string col){ return makeTypedVertexSetter<bool>(idx, std::move(col)); } },
+};
+
+static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(uint64_t, std::string)>> edgeSetterFactory = {
+    { LogicalTypeID::INT64,   [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<int64_t>(idx, std::move(col)); } },
+    { LogicalTypeID::INT32,   [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<int32_t>(idx, std::move(col)); } },
+    { LogicalTypeID::DOUBLE,  [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<double>(idx, std::move(col)); } },
+    { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<float>(idx, std::move(col)); } },
+    { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<std::string>(idx, std::move(col)); } },
+    { LogicalTypeID::BOOL,    [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<bool>(idx, std::move(col)); } },
+};
+
+static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(uint64_t, std::string)>> fromSetterFactory = {
+    { LogicalTypeID::INT64,   [](uint64_t idx, std::string col){ return makeFromSetter<int64_t>(idx, std::move(col)); } },
+    { LogicalTypeID::INT32,   [](uint64_t idx, std::string col){ return makeFromSetter<int32_t>(idx, std::move(col)); } },
+    { LogicalTypeID::DOUBLE,  [](uint64_t idx, std::string col){ return makeFromSetter<double>(idx, std::move(col)); } },
+    { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeFromSetter<float>(idx, std::move(col)); } },
+    { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeFromSetter<std::string>(idx, std::move(col)); } },
+};
+
+static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(uint64_t, std::string)>> toSetterFactory = {
+    { LogicalTypeID::INT64,   [](uint64_t idx, std::string col){ return makeToSetter<int64_t>(idx, std::move(col)); } },
+    { LogicalTypeID::INT32,   [](uint64_t idx, std::string col){ return makeToSetter<int32_t>(idx, std::move(col)); } },
+    { LogicalTypeID::DOUBLE,  [](uint64_t idx, std::string col){ return makeToSetter<double>(idx, std::move(col)); } },
+    { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeToSetter<float>(idx, std::move(col)); } },
+    { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeToSetter<std::string>(idx, std::move(col)); } },
 };
 
 static LogicalType GrapharTypeToKuzuTypeFunc(graphar::Type type) {
@@ -50,11 +108,11 @@ static LogicalType GrapharTypeToKuzuTypeFunc(graphar::Type type) {
     }
 }
 
-static void autoDetectSchema([[maybe_unused]] main::ClientContext* context, std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name,
+static void autoDetectVertexSchema([[maybe_unused]] main::ClientContext* context, std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name,
     std::vector<LogicalType>& types, std::vector<std::string>& names) {
     auto vertex_info = graph_info->GetVertexInfo(table_name);
     if (!vertex_info) {
-        throw BinderException("GraphAr's Type " + table_name + " does not exist.");
+        throw BinderException("GraphAr's Type " + table_name + " does not exist as vertex.");
     }
 
     // Construct the types and names from the vertex info.
@@ -66,20 +124,134 @@ static void autoDetectSchema([[maybe_unused]] main::ClientContext* context, std:
     }
 }
 
+static bool tryParseEdgeTableName(const std::string &table_name, std::string &src, std::string &edge, std::string &dst) {
+    // Try '.' then ':' then '_'
+    std::vector<char> seps = {'.', ':', '_'};
+    for (char sep : seps) {
+        std::vector<std::string> parts;
+        size_t start = 0;
+        for (size_t i = 0; i <= table_name.size(); ++i) {
+            if (i == table_name.size() || table_name[i] == sep) {
+                parts.push_back(table_name.substr(start, i - start));
+                start = i + 1;
+            }
+        }
+        if (parts.size() == 3 && !parts[0].empty() && !parts[1].empty() && !parts[2].empty()) {
+            src = parts[0];
+            edge = parts[1];
+            dst = parts[2];
+            return true;
+        }
+    }
+    return false;
+}
+
+static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context, std::shared_ptr<graphar::GraphInfo> graph_info, const std::string &table_name,
+    std::vector<LogicalType>& types, std::vector<std::string>& names, std::unordered_map<std::string, std::string>& edges_from_to_mapping) {
+    std::string src_type, edge_type, dst_type;
+    if (!tryParseEdgeTableName(table_name, src_type, edge_type, dst_type)) {
+        throw BinderException("Edge table_name must be specified in `src.edge.dst` format (supported separators: '.', ':', '_'). Given: " + table_name);
+    }
+
+    // Use GraphInfo to get EdgeInfo
+    auto edge_info = graph_info->GetEdgeInfo(src_type, edge_type, dst_type);
+    if (!edge_info) {
+        throw BinderException("GraphAr's EdgeInfo does not exist for " + table_name +
+                            " (parsed as " + src_type + "." + edge_type + "." + dst_type + ").");
+    }
+
+    auto from_vertex_info = graph_info->GetVertexInfo(src_type);
+    auto to_vertex_info = graph_info->GetVertexInfo(dst_type);
+    if (!from_vertex_info) {
+        throw BinderException("GraphAr's VertexInfo does not exist for edge source type " + src_type + ".");
+    }
+    if (!to_vertex_info) {
+        throw BinderException("GraphAr's VertexInfo does not exist for edge destination type " + dst_type + ".");
+    }
+
+    // Prepend from/to columns
+    names.push_back("from");
+    // Find from column mapping name in the from_vertex_info's primary keys
+    for (const auto& propertyGroup : from_vertex_info->GetPropertyGroups()) {
+        for (const auto& property : propertyGroup->GetProperties()) {
+            if (property.is_primary) {
+                edges_from_to_mapping.insert({"from", property.name});
+                break;
+            }
+        }
+    }
+    types.push_back(LogicalType::INT64());
+
+    names.push_back("to");
+    // Find to column mapping name in the to_vertex_info's primary keys
+    for (const auto& propertyGroup : to_vertex_info->GetPropertyGroups()) {
+        for (const auto& property : propertyGroup->GetProperties()) {
+            if (property.is_primary) {
+                edges_from_to_mapping.insert({"to", property.name});
+                break;
+            }
+        }
+    }
+    types.push_back(LogicalType::INT64());
+
+    // Add the edge properties except from/to
+    for (auto& property_group : edge_info->GetPropertyGroups()) {
+        for (const auto& property : property_group->GetProperties()) {
+            names.push_back(property.name);
+            types.push_back(GrapharTypeToKuzuTypeFunc(property.type->id()));
+        }
+    }
+}
+
 GrapharScanBindData::GrapharScanBindData(binder::expression_vector columns, common::FileScanInfo fileScanInfo, main::ClientContext* context,
-    std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name, std::vector<std::string> column_names, std::vector<kuzu::common::LogicalType> column_types)
+    std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name, std::vector<std::string> column_names, std::vector<kuzu::common::LogicalType> column_types, bool is_edge)
     : ScanFileBindData{std::move(columns), 0 /* numRows */, std::move(fileScanInfo), context},
         graph_info{std::move(graph_info)}, column_info{std::make_shared<KuzuColumnInfo>(column_names)},
-        table_name{std::move(table_name)}, column_names{std::move(column_names)}, column_types{std::move(column_types)} {
-            this->column_setters.reserve(this->column_names.size());
-            for (size_t i = 0; i < this->column_names.size(); ++i) {
-                auto typeID = this->column_types[i].getLogicalTypeID();
-                uint64_t fieldIdx = getFieldIdx(this->column_names[i]);
-                auto it = setterFactory.find(typeID);
-                if (it == setterFactory.end()) {
-                    throw NotImplementedException{"Unsupported column type in GrapharScan bind: " + std::to_string((int)typeID)};
+        table_name{std::move(table_name)}, column_names{std::move(column_names)}, column_types{std::move(column_types)}, is_edge(is_edge) {
+            if (!is_edge) {
+                this->vertex_column_setters.reserve(this->column_names.size());
+                for (size_t i = 0; i < this->column_names.size(); ++i) {
+                    auto typeID = this->column_types[i].getLogicalTypeID();
+                    uint64_t fieldIdx = getFieldIdx(this->column_names[i]);
+                    KU_ASSERT(fieldIdx != UINT64_MAX);
+                    auto it = vertexSetterFactory.find(typeID);
+                    if (it == vertexSetterFactory.end()) {
+                        throw NotImplementedException{"Unsupported column type in GrapharScan bind (vertex): " + std::to_string((int)typeID)};
+                    }
+                    this->vertex_column_setters.push_back(it->second(fieldIdx, this->column_names[i]));
                 }
-                this->column_setters.push_back(it->second(fieldIdx, this->column_names[i]));
+            } else {
+                this->edge_column_setters.reserve(this->column_names.size());
+                for (size_t i = 0; i < this->column_names.size(); ++i) {
+                    uint64_t fieldIdx = getFieldIdx(this->column_names[i]);
+                    KU_ASSERT(fieldIdx != UINT64_MAX);
+                    // special-case from/to
+                    if (StringUtils::caseInsensitiveEquals(this->column_names[i], "from")) {
+                        LogicalTypeID typeID = this->column_types[i].getLogicalTypeID();
+                        auto it = fromSetterFactory.find(typeID);
+                        if (it == fromSetterFactory.end()) {
+                            throw NotImplementedException{"Unsupported column type in GrapharScan bind (from edge): " + std::to_string((int)typeID)};
+                        }
+                        // this->edge_column_setters.push_back(it->second(fieldIdx, edges_from_to_mapping.at("from")));
+                        this->edge_column_setters.push_back(it->second(fieldIdx, "id"));
+                        continue;
+                    } else if (StringUtils::caseInsensitiveEquals(this->column_names[i], "to")) {
+                        LogicalTypeID typeID = this->column_types[i].getLogicalTypeID();
+                        auto it = toSetterFactory.find(typeID);
+                        if (it == toSetterFactory.end()) {
+                            throw NotImplementedException{"Unsupported column type in GrapharScan bind (to edge): " + std::to_string((int)typeID)};
+                        }
+                        // this->edge_column_setters.push_back(it->second(fieldIdx, edges_from_to_mapping.at("to")));
+                        this->edge_column_setters.push_back(it->second(fieldIdx, "id"));
+                        continue;
+                    }
+                    LogicalTypeID typeID = this->column_types[i].getLogicalTypeID();
+                    auto it = edgeSetterFactory.find(typeID);
+                    if (it == edgeSetterFactory.end()) {
+                        throw NotImplementedException{"Unsupported column type in GrapharScan bind (edge): " + std::to_string((int)typeID)};
+                    }
+                    this->edge_column_setters.push_back(it->second(fieldIdx, this->column_names[i]));
+                }
             }
             this->max_threads = context->getMaxNumThreadForExec();
         }
@@ -125,24 +297,24 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     if (!graph_info) {
         throw BinderException("GraphAr's GraphInfo could not be loaded from " + absolute_path);
     }
-    auto maybe_vertices_collection = graphar::VerticesCollection::Make(graph_info, table_name);
-    if (!maybe_vertices_collection) {
-        throw BinderException("GraphAr's VerticesCollection could not be created for " + table_name);
-    }
-    auto vertexIter = maybe_vertices_collection.value()->begin();
 
     std::vector<LogicalType> column_types;
     std::vector<std::string> column_names;
+    std::unordered_map<std::string, std::string> edges_from_to_mapping;
+    bool is_edge = false;
 
-    autoDetectSchema(context, graph_info, table_name, column_types, column_names);
-
-    // TODO: If expected column names and types are provided, use them.
-    // if (!scanInput->expectedColumnNames.empty()) {
-    //     column_types = copyVector(scanInput->expectedColumnTypes);
-    //     column_names = scanInput->expectedColumnNames;
-    // } else {
-    //     autoDetectSchema(context, graph_info, table_name, column_types, column_names);
-    // }
+    // Try vertex first
+    try {
+        autoDetectVertexSchema(context, graph_info, table_name, column_types, column_names);
+        is_edge = false;
+    } catch (BinderException&) {
+        // not a vertex, try edge
+        column_types.clear();
+        column_names.clear();
+        edges_from_to_mapping.clear();
+        autoDetectEdgeSchema(context, graph_info, table_name, column_types, column_names, edges_from_to_mapping);
+        is_edge = true;
+    }
 
     KU_ASSERT(column_types.size() == column_names.size());
     
@@ -150,7 +322,7 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
         TableFunction::extractYieldVariables(column_names, input->yieldVariables);
     auto columns = input->binder->createVariables(column_names, column_types);
     return std::make_unique<GrapharScanBindData>(std::move(columns), scanInput->fileScanInfo.copy(), context,
-        std::move(graph_info), std::move(table_name), std::move(column_names), std::move(column_types));
+        std::move(graph_info), std::move(table_name), std::move(column_names), std::move(column_types), is_edge);
 }
 
 } // namespace graphar_extension

@@ -28,7 +28,7 @@ target_link_libraries(
     kuzu_${EXTENSION_LIB_NAME}_extension
     PUBLIC
       graphar
-      Arrow::arrow_shared
+    #   Arrow::arrow_shared
 )
 
 if (APPLE AND NOT BUILD_STATIC_EXTENSION)

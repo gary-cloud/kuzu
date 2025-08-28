@@ -8,7 +8,7 @@ namespace graphar_extension {
 using namespace function;
 using namespace common;
 
-// Vertex setter maker (same as original)
+// Vertex setter maker for properties
 template<typename T>
 VertexColumnSetter makeTypedVertexSetter(uint64_t fieldIdx, std::string colName) {
     return [fieldIdx, colName = std::move(colName)](graphar::VertexIter& it, function::TableFuncOutput& output, kuzu::common::idx_t row) {
@@ -16,6 +16,11 @@ VertexColumnSetter makeTypedVertexSetter(uint64_t fieldIdx, std::string colName)
         auto &vec = output.dataChunk.getValueVectorMutable(fieldIdx);
         vec.setValue(row, res.value());
     };
+}
+
+template<>
+VertexColumnSetter makeTypedVertexSetter<list_entry_t>(uint64_t fieldIdx, std::string colName) {
+    throw NotImplementedException("List type is not supported in graphar scan.");
 }
 
 // Edge setter maker for properties
@@ -26,6 +31,11 @@ EdgeColumnSetter makeTypedEdgeSetter(uint64_t fieldIdx, std::string colName) {
         auto &vec = output.dataChunk.getValueVectorMutable(fieldIdx);
         vec.setValue(row, res.value());
     };
+}
+
+template<>
+EdgeColumnSetter makeTypedEdgeSetter<list_entry_t>(uint64_t fieldIdx, std::string colName) {
+    throw NotImplementedException("List type is not supported in graphar scan.");
 }
 
 // Edge setter for "from" (source) and "to" (destination)
@@ -58,6 +68,9 @@ static const std::unordered_map<LogicalTypeID, std::function<VertexColumnSetter(
     { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeTypedVertexSetter<float>(idx, std::move(col)); } },
     { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeTypedVertexSetter<std::string>(idx, std::move(col)); } },
     { LogicalTypeID::BOOL,    [](uint64_t idx, std::string col){ return makeTypedVertexSetter<bool>(idx, std::move(col)); } },
+    { LogicalTypeID::DATE,    [](uint64_t idx, std::string col){ return makeTypedVertexSetter<date_t>(idx, std::move(col)); } },
+    { LogicalTypeID::TIMESTAMP, [](uint64_t idx, std::string col){ return makeTypedVertexSetter<timestamp_t>(idx, std::move(col)); } },
+    { LogicalTypeID::LIST,    [](uint64_t idx, std::string col){ return makeTypedVertexSetter<list_entry_t>(idx, std::move(col)); } },
 };
 
 static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(uint64_t, std::string)>> edgeSetterFactory = {
@@ -67,6 +80,9 @@ static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(ui
     { LogicalTypeID::FLOAT,   [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<float>(idx, std::move(col)); } },
     { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<std::string>(idx, std::move(col)); } },
     { LogicalTypeID::BOOL,    [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<bool>(idx, std::move(col)); } },
+    { LogicalTypeID::DATE,    [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<date_t>(idx, std::move(col)); } },
+    { LogicalTypeID::TIMESTAMP, [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<timestamp_t>(idx, std::move(col)); } },
+    { LogicalTypeID::LIST,    [](uint64_t idx, std::string col){ return makeTypedEdgeSetter<list_entry_t>(idx, std::move(col)); } },
 };
 
 static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(uint64_t, std::string)>> fromSetterFactory = {
@@ -85,8 +101,9 @@ static const std::unordered_map<LogicalTypeID, std::function<EdgeColumnSetter(ui
     { LogicalTypeID::STRING,  [](uint64_t idx, std::string col){ return makeToSetter<std::string>(idx, std::move(col)); } },
 };
 
-static LogicalType GrapharTypeToKuzuTypeFunc(graphar::Type type) {
-    switch (type) {
+static LogicalType GrapharTypeToKuzuTypeFunc(std::shared_ptr<graphar::DataType> type) {
+    graphar::Type type_id = type->id();
+    switch (type_id) {
         case graphar::Type::BOOL:
             return LogicalType::BOOL();
         case graphar::Type::INT64:
@@ -103,8 +120,31 @@ static LogicalType GrapharTypeToKuzuTypeFunc(graphar::Type type) {
             return LogicalType::DATE();
         case graphar::Type::TIMESTAMP:
             return LogicalType::TIMESTAMP();
+        case graphar::Type::LIST: {
+            auto value_type_id = type->value_type()->id();
+            switch (value_type_id) {
+                case graphar::Type::BOOL:
+                    return LogicalType::LIST(LogicalType::BOOL());
+                case graphar::Type::INT64:
+                    return LogicalType::LIST(LogicalType::INT64());
+                case graphar::Type::INT32:
+                    return LogicalType::LIST(LogicalType::INT32());
+                case graphar::Type::FLOAT:
+                    return LogicalType::LIST(LogicalType::FLOAT());
+                case graphar::Type::STRING:
+                    return LogicalType::LIST(LogicalType::STRING());
+                case graphar::Type::DOUBLE:
+                    return LogicalType::LIST(LogicalType::DOUBLE());
+                case graphar::Type::DATE:
+                    return LogicalType::LIST(LogicalType::DATE());
+                case graphar::Type::TIMESTAMP:
+                    return LogicalType::LIST(LogicalType::TIMESTAMP());
+                default:
+                    throw NotImplementedException{"GraphAr's List Type with value type " + std::to_string(static_cast<int>(value_type_id)) + " is not implemented."};
+            }
+        }
         default:
-            throw NotImplementedException{"GraphAr's Type " + std::to_string(static_cast<int>(type)) + " is not implemented."};
+            throw NotImplementedException{"GraphAr's Type " + std::to_string(static_cast<int>(type_id)) + " is not implemented."};
     }
 }
 
@@ -119,7 +159,7 @@ static void autoDetectVertexSchema([[maybe_unused]] main::ClientContext* context
     for (auto& property_group : vertex_info->GetPropertyGroups()) {
         for (const auto& property : property_group->GetProperties()) {
             names.push_back(property.name);
-            types.push_back(GrapharTypeToKuzuTypeFunc(property.type->id()));
+            types.push_back(GrapharTypeToKuzuTypeFunc(property.type));
         }
     }
 }
@@ -198,7 +238,7 @@ static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context, 
     for (auto& property_group : edge_info->GetPropertyGroups()) {
         for (const auto& property : property_group->GetProperties()) {
             names.push_back(property.name);
-            types.push_back(GrapharTypeToKuzuTypeFunc(property.type->id()));
+            types.push_back(GrapharTypeToKuzuTypeFunc(property.type));
         }
     }
 }
@@ -232,8 +272,7 @@ GrapharScanBindData::GrapharScanBindData(binder::expression_vector columns, comm
                         if (it == fromSetterFactory.end()) {
                             throw NotImplementedException{"Unsupported column type in GrapharScan bind (from edge): " + std::to_string((int)typeID)};
                         }
-                        // this->edge_column_setters.push_back(it->second(fieldIdx, edges_from_to_mapping.at("from")));
-                        this->edge_column_setters.push_back(it->second(fieldIdx, "id"));
+                        this->edge_column_setters.push_back(it->second(fieldIdx, edges_from_to_mapping.at("from")));
                         continue;
                     } else if (StringUtils::caseInsensitiveEquals(this->column_names[i], "to")) {
                         LogicalTypeID typeID = this->column_types[i].getLogicalTypeID();
@@ -241,8 +280,7 @@ GrapharScanBindData::GrapharScanBindData(binder::expression_vector columns, comm
                         if (it == toSetterFactory.end()) {
                             throw NotImplementedException{"Unsupported column type in GrapharScan bind (to edge): " + std::to_string((int)typeID)};
                         }
-                        // this->edge_column_setters.push_back(it->second(fieldIdx, edges_from_to_mapping.at("to")));
-                        this->edge_column_setters.push_back(it->second(fieldIdx, "id"));
+                        this->edge_column_setters.push_back(it->second(fieldIdx, edges_from_to_mapping.at("to")));
                         continue;
                     }
                     LogicalTypeID typeID = this->column_types[i].getLogicalTypeID();

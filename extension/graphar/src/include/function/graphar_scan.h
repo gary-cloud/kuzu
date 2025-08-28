@@ -16,8 +16,8 @@
 #include "function/table/table_function.h"
 #include "function/table/scan_file_function.h"
 
-#include "arrow/api.h"
-#include "arrow/filesystem/api.h"
+// #include "arrow/api.h"
+// #include "arrow/filesystem/api.h"
 
 #include "graphar/api/high_level_reader.h"
 

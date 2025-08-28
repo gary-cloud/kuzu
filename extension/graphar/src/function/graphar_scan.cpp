@@ -118,6 +118,7 @@ offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
             ++it;
             count++;
         }
+        
         output.dataChunk.state->getSelVectorUnsafe().setSelSize(count);
         return output.dataChunk.state->getSelVector().getSelSize();
     } else {

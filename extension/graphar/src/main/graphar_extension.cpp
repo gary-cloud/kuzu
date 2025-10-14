@@ -10,6 +10,7 @@ namespace graphar_extension {
 void GrapharExtension::load(main::ClientContext* context) {
     auto& db = *context->getDatabase();
     extension::ExtensionUtils::addTableFunc<GrapharScanFunction>(db);
+    extension::ExtensionUtils::addScalarFunc<GrapharExportFunction>(db);
 }
 
 } // namespace graphar_extension

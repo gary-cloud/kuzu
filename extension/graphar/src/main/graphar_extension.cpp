@@ -1,5 +1,6 @@
 #include "main/graphar_extension.h"
 
+#include "function/graphar_export.h"
 #include "function/graphar_scan.h"
 #include "main/client_context.h"
 #include "main/database.h"

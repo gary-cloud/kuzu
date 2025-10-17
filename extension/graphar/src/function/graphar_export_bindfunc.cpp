@@ -419,8 +419,6 @@ GrapharExportOptions::GrapharExportOptions(case_insensitive_map_t<common::Value>
             setParquetAllowTruncatedTimestamps(value);
         } else if (name == "PARQUET-STORE_SCHEMA") {
             setParquetStoreSchema(value);
-        } else {
-            throw common::RuntimeException{common::stringFormat("Unrecognized option: {}.", name)};
         }
     }
 
@@ -431,50 +429,38 @@ GrapharExportOptions::GrapharExportOptions(case_insensitive_map_t<common::Value>
 
 ExportGrapharBindData::ExportGrapharBindData(std::vector<std::string> columnNames,
     const std::string& fileName, GrapharExportOptions grapharExportOptions, std::string tableName,
-    ValidateLevel validateLevel)
-    : ExportFuncBindData(std::move(columnNames), fileName),
-      exportOptions(std::move(grapharExportOptions)), tableName(std::move(tableName)),
-      validateLevel(validateLevel) {
-    auto absolute_path = fileName;
-    // Load graph info from the file path
-    graphInfo = graphar::GraphInfo::Load(absolute_path).value();
-    if (!graphInfo) {
-        throw BinderException("GraphAr's GraphInfo could not be loaded from " + absolute_path);
-    }
-
-    // detect schema
-    KU_ASSERT(columnNames.size() == types.size());
-    for (size_t i = 0; i < columnNames.size(); i++) {
-        schema.push_back(PropMeta{columnNames[i], kuzuTypeToGrapharType(types[i]), Cardinality::SINGLE});
-    }
-}
-
-ExportGrapharBindData::ExportGrapharBindData(std::vector<std::string> columnNames,
-    std::vector<LogicalType> columnTypes, std::string fileName,
-    GrapharExportOptions grapharExportOptions, std::string tableName, ValidateLevel validateLevel)
+    std::string targetDir, ValidateLevel validateLevel)
     : ExportFuncBindData(std::move(columnNames), std::move(fileName)),
       exportOptions(std::move(grapharExportOptions)), tableName(std::move(tableName)),
-      validateLevel(validateLevel) {
-    auto absolute_path = fileName;
+      targetDir(std::move(targetDir)), validateLevel(validateLevel) {
+    auto absolute_path = this->fileName;
     // Load graph info from the file path
     graphInfo = graphar::GraphInfo::Load(absolute_path).value();
     if (!graphInfo) {
         throw BinderException("GraphAr's GraphInfo could not be loaded from " + absolute_path);
     }
-
-    setDataType(std::move(columnTypes));
-
-    // detect schema
-    KU_ASSERT(columnNames.size() == types.size());
-    for (size_t i = 0; i < columnNames.size(); i++) {
-        schema.push_back(PropMeta{columnNames[i], kuzuTypeToGrapharType(types[i]), Cardinality::SINGLE});
-    }
 }
+
+// ExportGrapharBindData::ExportGrapharBindData(std::vector<std::string> columnNames,
+//     std::vector<LogicalType> columnTypes, std::string fileName,
+//     GrapharExportOptions grapharExportOptions, std::string tableName, std::string targetDir, ValidateLevel
+//     validateLevel) : ExportFuncBindData(std::move(columnNames), std::move(fileName)),
+//       exportOptions(std::move(grapharExportOptions)), tableName(std::move(tableName)),
+//       targetDir(std::move(targetDir)), validateLevel(validateLevel) {
+//     auto absolute_path = this->fileName;
+//     // Load graph info from the file path
+//     graphInfo = graphar::GraphInfo::Load(absolute_path).value();
+//     if (!graphInfo) {
+//         throw BinderException("GraphAr's GraphInfo could not be loaded from " + absolute_path);
+//     }
+
+//     setDataType(std::move(columnTypes));
+// }
 
 std::unique_ptr<ExportFuncBindData> bindFunc(ExportFuncBindInput& bindInput) {
     GrapharExportOptions grapharExportOptions{bindInput.parsingOptions};
     // get table name.
-    auto table_it = bindInput.parsingOptions.find("TABLENAME");
+    auto table_it = bindInput.parsingOptions.find("TABLE_NAME");
     if (table_it != bindInput.parsingOptions.end()) {
         if (table_it->second.getDataType().getLogicalTypeID() != LogicalTypeID::STRING) {
             throw common::RuntimeException{
@@ -483,12 +469,24 @@ std::unique_ptr<ExportFuncBindData> bindFunc(ExportFuncBindInput& bindInput) {
         }
     } else {
         throw BinderException("Table name must be specified in the parsing options with key "
-                              "'TABLENAME' for GraphAr export.");
+                              "'TABLE_NAME' for GraphAr export.");
     }
     std::string tableName = table_it->second.getValue<std::string>();
 
+    // get target directory.
+    std::string targetDir = DEFAULT_TARGET_DIR;
+    auto dir_it = bindInput.parsingOptions.find("TARGET_DIR");
+    if (dir_it != bindInput.parsingOptions.end()) {
+        if (dir_it->second.getDataType().getLogicalTypeID() != LogicalTypeID::STRING) {
+            throw common::RuntimeException{
+                common::stringFormat("Target directory option expects a string value, got: {}.",
+                    dir_it->second.getDataType().toString())};
+        }
+        targetDir = dir_it->second.getValue<std::string>();
+    }
+
     // get validate level.
-    ValidateLevel validateLevel = ValidateLevel::default_validate;
+    ValidateLevel validateLevel = ValidateLevel::strong_validate;
     auto validate_it = bindInput.parsingOptions.find("VALIDATE_LEVEL");
     if (validate_it != bindInput.parsingOptions.end()) {
         if (validate_it->second.getDataType().getLogicalTypeID() != LogicalTypeID::STRING) {
@@ -510,8 +508,11 @@ std::unique_ptr<ExportFuncBindData> bindFunc(ExportFuncBindInput& bindInput) {
                 "Unrecognized validate level option: {}.", validate_it->second.toString())};
         }
     }
+
+    // convert '.../ldbc_sample.graph.yml.graphar' to '.../ldbc_sample.graph.yml'.
+    getYamlNameWithoutGrapharLabel(bindInput.filePath);
     return std::make_unique<ExportGrapharBindData>(bindInput.columnNames, bindInput.filePath,
-        grapharExportOptions, tableName, validateLevel);
+        grapharExportOptions, tableName, targetDir, validateLevel);
 }
 
 } // namespace graphar_extension

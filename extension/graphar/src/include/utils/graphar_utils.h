@@ -12,11 +12,19 @@ using namespace kuzu::common;
 using namespace graphar;
 
 #define SEPARATOR '_'
+#define DEFAULT_GRAPHAR_LABEL ".graphar"
+#define DEFAULT_TARGET_DIR "/tmp/"
 
 /**
  * Get the first token from a string separated by '-'.
  */
 std::string getFirstToken(const std::string& input);
+
+/*
+ * Remove the trailing ".graphar" from the file path if it exists.
+ */
+// std::string getYamlNameWithoutGrapharLabel(const std::string& filePath);
+void getYamlNameWithoutGrapharLabel(const std::string& filePath);
 
 /**
  * Checks whether a string ends with a given suffix.

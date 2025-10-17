@@ -62,10 +62,9 @@ std::unique_ptr<TableFuncSharedState> initGrapharScanSharedState(
         // parse table_name into src.edge.dst
         std::string src, edge, dst;
         if (!tryParseEdgeTableName(grapharScanBindData->table_name, src, edge, dst)) {
-            throw BinderException(
-                "Edge table name " + grapharScanBindData->table_name +
-                " is invalid. It should be in the format of "
-                "<source>_<edge>_<destination>.");
+            throw BinderException("Edge table name " + grapharScanBindData->table_name +
+                                  " is invalid. It should be in the format of "
+                                  "<source>_<edge>_<destination>.");
         }
 
         maybe_edges_collection = graphar::EdgesCollection::Make(grapharScanBindData->graph_info,

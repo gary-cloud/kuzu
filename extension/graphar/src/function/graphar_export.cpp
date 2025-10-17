@@ -16,53 +16,88 @@ std::shared_ptr<ExportFuncSharedState> createSharedStateFunc() {
 }
 
 std::unique_ptr<ExportFuncLocalState> initLocalState(main::ClientContext&,
-    const ExportFuncBindData& bindData, std::vector<bool>) {
-    const ExportGrapharBindData& grapharBindData =
-        bindData.constCast<ExportGrapharBindData>();
-    return std::make_unique<ExportGrapharLocalState>(grapharBindData.schema);
+    const ExportFuncBindData&, std::vector<bool>) {
+    return std::make_unique<ExportGrapharLocalState>();
 }
 
 void sinkFunc(ExportFuncSharedState&, ExportFuncLocalState& localState,
-    [[maybe_unused]] const ExportFuncBindData& bindData, std::vector<std::shared_ptr<ValueVector>> inputVectors) {
+    [[maybe_unused]] const ExportFuncBindData& bindData,
+    std::vector<std::shared_ptr<ValueVector>> inputVectors) {
     auto& grapharLocalState = localState.cast<ExportGrapharLocalState>();
 
+    // ATTENTION: postpone buffer creation until first sink call, because we can't
+    // know the schema before that (It's hard for bindData to get the type info).
+    if (!grapharLocalState.buffer) {
+        // schema of input vectors
+        std::vector<PropMeta> schema_to_create;
+
+        // fill the schema and create buffer in local state.
+        KU_ASSERT(inputVectors.size() == bindData.columnNames.size());
+        for (size_t i = 0; i < inputVectors.size(); i++) {
+            schema_to_create.push_back(PropMeta{bindData.columnNames[i],
+                kuzuTypeToGrapharType(inputVectors[i]->dataType), Cardinality::SINGLE});
+        }
+
+        grapharLocalState.buffer = std::make_shared<WriteRowsBuffer>(std::move(schema_to_create));
+    }
+
     auto& buffer = grapharLocalState.buffer;
-    auto& schema = grapharLocalState.buffer.Schema();
+    const auto& schema = grapharLocalState.buffer->Schema();
 
-    // fill the buffer with input vectors.
-    for (size_t i = 0; i < inputVectors.size(); i++) {
-        size_t rid = buffer.NewRow();
+    if (inputVectors.size() != schema.size()) {
+        throw common::RuntimeException("inputVectors size != schema size");
+    }
+    // number of logical rows in this batch (selection size)
+    size_t num_rows = inputVectors[0]->state->getSelSize();
 
-        for (size_t j = 0; j < schema.size(); j++) {
-            switch (schema[j].type) {
+    // optional check
+    for (size_t c = 1; c < inputVectors.size(); ++c) {
+        if (inputVectors[c]->state->getSelSize() != num_rows) {
+            throw common::RuntimeException(
+                common::stringFormat("inconsistent column lengths: %zu vs %zu", num_rows,
+                    inputVectors[c]->state->getSelSize()));
+        }
+    }
+
+    for (size_t logicalRow = 0; logicalRow < num_rows; ++logicalRow) {
+        size_t rid = buffer->NewRow();
+
+        for (size_t col = 0; col < schema.size(); ++col) {
+            const auto& meta = schema[col];
+            auto& vecPtr = inputVectors[col];
+            // map logical -> physical position using selection vector
+            uint32_t physPos = vecPtr->state->getSelVector()[logicalRow];
+
+            // use physical position to check for null
+            if (vecPtr->isNull(physPos)) {
+                continue; // keep as monostate
+            }
+
+            switch (meta.type) {
             case Type::INT64:
             case Type::TIMESTAMP:
-                buffer.SetProperty(rid, schema[j].name,
-                    Scalar(inputVectors[i]->getValue<int64_t>(j)));
+                buffer->SetProperty(rid, meta.name, Scalar(vecPtr->getValue<int64_t>(physPos)));
                 break;
             case Type::INT32:
             case Type::DATE:
-                buffer.SetProperty(rid, schema[j].name,
-                    Scalar(inputVectors[i]->getValue<int32_t>(j)));
+                buffer->SetProperty(rid, meta.name, Scalar(vecPtr->getValue<int32_t>(physPos)));
                 break;
             case Type::DOUBLE:
-                buffer.SetProperty(rid, schema[j].name,
-                    Scalar(inputVectors[i]->getValue<double>(j)));
+                buffer->SetProperty(rid, meta.name, Scalar(vecPtr->getValue<double>(physPos)));
                 break;
             case Type::FLOAT:
-                buffer.SetProperty(rid, schema[j].name,
-                    Scalar(inputVectors[i]->getValue<float>(j)));
+                buffer->SetProperty(rid, meta.name, Scalar(vecPtr->getValue<float>(physPos)));
                 break;
             case Type::STRING:
-                buffer.SetProperty(rid, schema[j].name,
-                    Scalar(inputVectors[i]->getValue<std::string>(j)));
+                buffer->SetProperty(rid, meta.name,
+                    Scalar(vecPtr->getValue<ku_string_t>(physPos).getAsString()));
                 break;
             case Type::BOOL:
-                buffer.SetProperty(rid, schema[j].name, Scalar(inputVectors[i]->getValue<bool>(j)));
+                buffer->SetProperty(rid, meta.name, Scalar(vecPtr->getValue<bool>(physPos)));
                 break;
             default:
                 throw common::RuntimeException(
-                    common::stringFormat("Unsupported type for property '{}'", schema[j].name));
+                    common::stringFormat("Unsupported type for property '{}'", meta.name));
             }
         }
     }
@@ -72,8 +107,14 @@ void combineFunc(ExportFuncSharedState& sharedState, ExportFuncLocalState& local
     auto& grapharSharedState = sharedState.cast<ExportGrapharSharedState>();
     auto& grapharLocalState = localState.cast<ExportGrapharLocalState>();
 
+    // nothing to combine if local buffer is null, just return.
+    // this can happen if sink haven't been called yet.
+    if (!grapharLocalState.buffer) {
+        return;
+    }
+
     auto& buffer = grapharLocalState.buffer;
-    auto& schema = grapharLocalState.buffer.Schema();
+    auto& schema = grapharLocalState.buffer->Schema();
 
     // Helper: find index of a property by a list of candidate names (case-sensitive).
     auto findIndexByCandidates =
@@ -113,7 +154,8 @@ void combineFunc(ExportFuncSharedState& sharedState, ExportFuncLocalState& local
     std::lock_guard<std::mutex> lck{grapharSharedState.mtx};
 
     // Iterate over rows and convert each row into a Vertex or Edge.
-    for (auto& row : buffer.GetRows()) {
+    auto& rows = buffer->GetRows();
+    for (auto& row : rows) {
         if (!grapharSharedState.is_edge) {
             // Vertex export
             graphar::builder::Vertex vertex;
@@ -162,7 +204,8 @@ void combineFunc(ExportFuncSharedState& sharedState, ExportFuncLocalState& local
             }
             auto st_v = grapharSharedState.verticesBuilder->AddVertex(vertex);
             if (!st_v.ok()) {
-                throw common::RuntimeException{common::stringFormat("AddVertex failed: {}", st_v.message())};
+                throw common::RuntimeException{
+                    common::stringFormat("AddVertex failed: {}", st_v.message())};
             }
 
         } else {
@@ -243,7 +286,8 @@ void combineFunc(ExportFuncSharedState& sharedState, ExportFuncLocalState& local
             }
             auto st_e = grapharSharedState.edgesBuilder->AddEdge(edge);
             if (!st_e.ok()) {
-                throw common::RuntimeException{common::stringFormat("AddEdge failed: {}", st_e.message())};
+                throw common::RuntimeException{
+                    common::stringFormat("AddEdge failed: {}", st_e.message())};
             }
         }
     }
@@ -281,6 +325,7 @@ void ExportGrapharSharedState::init([[maybe_unused]] main::ClientContext& contex
     std::shared_ptr<GraphInfo> graph_info = grapharBindData.graphInfo;
     GrapharExportOptions exportOptions = grapharBindData.exportOptions;
     std::string tableName = grapharBindData.tableName;
+    std::string targetDir = grapharBindData.targetDir;
     ValidateLevel validateLevel = grapharBindData.validateLevel;
 
     auto vertex_infos = graph_info->GetVertexInfos();
@@ -290,7 +335,7 @@ void ExportGrapharSharedState::init([[maybe_unused]] main::ClientContext& contex
     for (const auto& v_info : vertex_infos) {
         if (v_info->GetType() == tableName) {
             vertexInfo = v_info;
-            verticesBuilder = std::make_shared<builder::VerticesBuilder>(vertexInfo, "/tmp/", 0L,
+            verticesBuilder = std::make_shared<builder::VerticesBuilder>(vertexInfo, targetDir, 0L,
                 exportOptions.wopt, validateLevel);
             is_edge = false;
             return;
@@ -302,10 +347,11 @@ void ExportGrapharSharedState::init([[maybe_unused]] main::ClientContext& contex
         std::string src_type = e_info->GetSrcType();
         std::string edge_type = e_info->GetEdgeType();
         std::string dst_type = e_info->GetDstType();
-        std::string full_edge_name = src_type + REGULAR_SEPARATOR + edge_type + REGULAR_SEPARATOR + dst_type;
+        std::string full_edge_name =
+            src_type + REGULAR_SEPARATOR + edge_type + REGULAR_SEPARATOR + dst_type;
         if (full_edge_name == tableName) {
             edgeInfo = e_info;
-            edgesBuilder = std::make_shared<builder::EdgesBuilder>(edgeInfo, "/tmp/",
+            edgesBuilder = std::make_shared<builder::EdgesBuilder>(edgeInfo, targetDir,
                 AdjListType::ordered_by_source, 903, exportOptions.wopt, validateLevel);
             is_edge = true;
             return;

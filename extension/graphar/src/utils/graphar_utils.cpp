@@ -11,6 +11,14 @@ std::string getFirstToken(const std::string& input) {
     return input.substr(0, pos);
 }
 
+void getYamlNameWithoutGrapharLabel(const std::string& filePath) {
+    const std::string grapharLabel = DEFAULT_GRAPHAR_LABEL;
+    if (ends_with(filePath, grapharLabel)) {
+        // remove the trailing ".graphar"
+        const_cast<std::string&>(filePath).erase(filePath.size() - grapharLabel.size());
+    }
+}
+
 bool ends_with(const std::string& s, const std::string& suffix) {
     if (s.size() < suffix.size())
         return false;

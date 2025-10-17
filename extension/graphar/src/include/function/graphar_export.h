@@ -287,23 +287,21 @@ struct ExportGrapharBindData : public ExportFuncBindData {
     GrapharExportOptions exportOptions;
     std::shared_ptr<GraphInfo> graphInfo;
     std::string tableName;
+    std::string targetDir;
     ValidateLevel validateLevel;
-
-    // schema of input vectors
-    std::vector<PropMeta> schema;
 
     ExportGrapharBindData(std::vector<std::string> columnNames, const std::string& fileName,
         GrapharExportOptions grapharWriterOptions, std::string tableName,
-        ValidateLevel validateLevel);
+        std::string targetDir, ValidateLevel validateLevel);
 
-    ExportGrapharBindData(std::vector<std::string> columnNames,
-        std::vector<LogicalType> columnTypes, std::string fileName,
-        GrapharExportOptions grapharWriterOptions, std::string tableName,
-        ValidateLevel validateLevel);
+    // ExportGrapharBindData(std::vector<std::string> columnNames,
+    //     std::vector<LogicalType> columnTypes, std::string fileName,
+    //     GrapharExportOptions grapharWriterOptions, std::string tableName,
+    //     std::string targetDir, ValidateLevel validateLevel);
 
     std::unique_ptr<ExportFuncBindData> copy() const override {
-        return std::make_unique<ExportGrapharBindData>(columnNames, LogicalType::copy(types),
-            fileName, exportOptions, tableName, validateLevel);
+        return std::make_unique<ExportGrapharBindData>(columnNames, fileName, exportOptions,
+            tableName, targetDir, validateLevel);
     }
 };
 
@@ -326,9 +324,12 @@ struct ExportGrapharSharedState : public ExportFuncSharedState {
 };
 
 struct ExportGrapharLocalState : public ExportFuncLocalState {
-    WriteRowsBuffer buffer;
+    std::shared_ptr<WriteRowsBuffer> buffer = nullptr;
 
-    explicit ExportGrapharLocalState(const std::vector<PropMeta>& schema) : buffer(schema) {}
+    ExportGrapharLocalState() = default;
+
+    explicit ExportGrapharLocalState(const std::vector<PropMeta>& schema)
+        : buffer(std::make_shared<WriteRowsBuffer>(schema)) {}
 };
 
 std::unique_ptr<ExportFuncBindData> bindFunc(ExportFuncBindInput& bindInput);

@@ -19,7 +19,7 @@ VertexColumnSetter makeTypedVertexSetter(uint64_t fieldIdx, std::string colName)
 }
 
 template<>
-VertexColumnSetter makeTypedVertexSetter<list_entry_t>(uint64_t fieldIdx, std::string colName) {
+VertexColumnSetter makeTypedVertexSetter<list_entry_t>([[maybe_unused]] uint64_t fieldIdx, [[maybe_unused]] std::string colName) {
     throw NotImplementedException("List type is not supported in graphar scan.");
 }
 
@@ -36,7 +36,7 @@ EdgeColumnSetter makeTypedEdgeSetter(uint64_t fieldIdx, std::string colName) {
 }
 
 template<>
-EdgeColumnSetter makeTypedEdgeSetter<list_entry_t>(uint64_t fieldIdx, std::string colName) {
+EdgeColumnSetter makeTypedEdgeSetter<list_entry_t>([[maybe_unused]] uint64_t fieldIdx, [[maybe_unused]] std::string colName) {
     throw NotImplementedException("List type is not supported in graphar scan.");
 }
 
@@ -220,8 +220,8 @@ static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context,
     std::unordered_map<std::string, std::string>& edges_from_to_mapping) {
     std::string src_type, edge_type, dst_type;
     if (!tryParseEdgeTableName(table_name, src_type, edge_type, dst_type)) {
-        throw BinderException("Edge table_name must be specified in `src.edge.dst` format "
-                              "(supported separators: '.', ':', '_'). Given: " +
+        throw BinderException("Edge table_name must be specified in `src_edge_dst` format "
+                              "(supported separators: '_'). Given: " +
                               table_name);
     }
 
@@ -229,7 +229,7 @@ static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context,
     auto edgeInfo = graph_info->GetEdgeInfo(src_type, edge_type, dst_type);
     if (!edgeInfo) {
         throw BinderException("GraphAr's EdgeInfo does not exist for " + table_name +
-                              " (parsed as " + src_type + "." + edge_type + "." + dst_type + ").");
+                              " (parsed as " + src_type + REGULAR_SEPARATOR + edge_type + REGULAR_SEPARATOR + dst_type + ").");
     }
 
     auto from_vertex_info = graph_info->GetVertexInfo(src_type);
@@ -378,6 +378,7 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     if (absolute_path.empty()) {
         throw BinderException("GraphAr scan requires a valid file path.");
     }
+
     std::string table_name = scanInput->fileScanInfo.options.at("table_name").strVal;
 
     // Load graph info from the file path
@@ -389,7 +390,7 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     std::vector<LogicalType> column_types;
     std::vector<std::string> column_names;
     std::unordered_map<std::string, std::string> edges_from_to_mapping;
-    bool is_edge;
+    bool is_edge = false;
 
     auto vertex_infos = graph_info->GetVertexInfos();
     auto edge_infos = graph_info->GetEdgeInfos();
@@ -408,17 +409,16 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
         std::string src_type = e_info->GetSrcType();
         std::string edge_type = e_info->GetEdgeType();
         std::string dst_type = e_info->GetDstType();
-        std::string full_edge_name1 = src_type + "." + edge_type + "." + dst_type;
-        std::string full_edge_name2 = src_type + ":" + edge_type + ":" + dst_type;
-        std::string full_edge_name3 = src_type + "_" + edge_type + "_" + dst_type;
-        if (full_edge_name1 == table_name || full_edge_name2 == table_name ||
-            full_edge_name3 == table_name) {
+        std::string full_edge_name = src_type + REGULAR_SEPARATOR + edge_type + REGULAR_SEPARATOR + dst_type;
+        if (full_edge_name == table_name) {
             autoDetectEdgeSchema(context, graph_info, table_name, column_types, column_names,
                 edges_from_to_mapping);
             is_edge = true;
             goto TAIL;
         }
     }
+
+    KU_ASSERT(true);
 
     // try {
     //     autoDetectVertexSchema(context, graph_info, table_name, column_types, column_names);
@@ -436,8 +436,17 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
 TAIL:
     KU_ASSERT(column_types.size() == column_names.size());
 
-    column_names = TableFunction::extractYieldVariables(column_names, input->yieldVariables);
-    auto columns = input->binder->createVariables(column_names, column_types);
+    // ignore property type suffixes in column names.
+    // Examples:
+    // 'person-date' (vertex) -getFirstToken-> 'person'
+    // 'knows-timestamp' (edge) -getFirstToken-> 'knows'
+    std::vector<std::string> base_column_names;
+    for (auto& name : column_names) {
+        base_column_names.push_back(getFirstToken(name));
+    }
+    
+    base_column_names = TableFunction::extractYieldVariables(base_column_names, input->yieldVariables);
+    auto columns = input->binder->createVariables(base_column_names, column_types);
     return std::make_unique<GrapharScanBindData>(std::move(columns), scanInput->fileScanInfo.copy(),
         context, std::move(graph_info), std::move(table_name), std::move(column_names),
         std::move(column_types), is_edge);

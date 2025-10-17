@@ -11,10 +11,17 @@ namespace graphar_extension {
 using namespace kuzu::common;
 using namespace graphar;
 
+#define SEPARATOR '_'
+
+/**
+ * Get the first token from a string separated by '-'.
+ */
+std::string getFirstToken(const std::string& input);
+
 /**
  * Checks whether a string ends with a given suffix.
  */
-inline bool ends_with(const std::string& s, const std::string& suffix);
+bool ends_with(const std::string& s, const std::string& suffix);
 
 /**
  * parse_is_edge
@@ -28,7 +35,7 @@ inline bool ends_with(const std::string& s, const std::string& suffix);
  *  to uppercase via common::StringUtils::getUpper. It supports both '/' and '\\'
  *  as valid path separators.
  */
-inline bool parse_is_edge(const std::string& path);
+bool parse_is_edge(const std::string& path);
 
 /**
  * tryParseEdgeTableName
@@ -37,16 +44,14 @@ inline bool parse_is_edge(const std::string& path);
  *  - Return: true  -> if the table name was successfully parsed as "src.edge.dst" format
  *            false -> if the table name does not match the expected format
  *
- * This function attempts to parse a table name using multiple separator characters
- * in order: '.', ':', '_'. It expects exactly 3 non-empty parts in the format:
+ * This function attempts to parse a table name using multiple separator character '_'. 
+ * It expects exactly 3 non-empty parts in the format:
  *   [source_vertex_label][separator][edge_label][separator][destination_vertex_label]
  *
  * Examples of valid inputs:
- *   - "person.knows.person"   -> src="person", edge="knows", dst="person"
- *   - "user:follows:user"     -> src="user", edge="follows", dst="user"
  *   - "page_likes_page"       -> src="page", edge="likes", dst="page"
  */
-inline bool tryParseEdgeTableName(const std::string& table_name, std::string& src,
+bool tryParseEdgeTableName(const std::string& table_name, std::string& src,
     std::string& edge, std::string& dst);
 
 /*

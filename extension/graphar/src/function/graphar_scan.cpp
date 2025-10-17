@@ -65,7 +65,6 @@ std::unique_ptr<TableFuncSharedState> initGrapharScanSharedState(
             throw BinderException(
                 "Edge table name " + grapharScanBindData->table_name +
                 " is invalid. It should be in the format of "
-                "<source>.<edge>.<destination> or <source>:<edge>:<destination> or "
                 "<source>_<edge>_<destination>.");
         }
 

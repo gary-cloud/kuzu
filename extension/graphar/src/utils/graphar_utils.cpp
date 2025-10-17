@@ -3,13 +3,21 @@
 namespace kuzu {
 namespace graphar_extension {
 
-inline bool ends_with(const std::string& s, const std::string& suffix) {
+std::string getFirstToken(const std::string& input) {
+    size_t pos = input.find('-');
+    if (pos == std::string::npos) {
+        return input;
+    }
+    return input.substr(0, pos);
+}
+
+bool ends_with(const std::string& s, const std::string& suffix) {
     if (s.size() < suffix.size())
         return false;
     return s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-inline bool parse_is_edge(const std::string& path) {
+bool parse_is_edge(const std::string& path) {
     if (path.empty()) {
         throw std::invalid_argument("empty path");
     }
@@ -42,25 +50,22 @@ inline bool parse_is_edge(const std::string& path) {
         "filename does not end with .vertex.(yml|yaml) or .edge.(yml|yaml)");
 }
 
-inline bool tryParseEdgeTableName(const std::string& table_name, std::string& src,
+bool tryParseEdgeTableName(const std::string& table_name, std::string& src,
     std::string& edge, std::string& dst) {
-    // Try '.' then ':' then '_'
-    std::vector<char> seps = {'.', ':', '_'};
-    for (char sep : seps) {
-        std::vector<std::string> parts;
-        size_t start = 0;
-        for (size_t i = 0; i <= table_name.size(); ++i) {
-            if (i == table_name.size() || table_name[i] == sep) {
-                parts.push_back(table_name.substr(start, i - start));
-                start = i + 1;
-            }
+    // Split by '_'.
+    std::vector<std::string> parts;
+    size_t start = 0;
+    for (size_t i = 0; i <= table_name.size(); ++i) {
+        if (i == table_name.size() || table_name[i] == SEPARATOR) {
+            parts.push_back(table_name.substr(start, i - start));
+            start = i + 1;
         }
-        if (parts.size() == 3 && !parts[0].empty() && !parts[1].empty() && !parts[2].empty()) {
-            src = parts[0];
-            edge = parts[1];
-            dst = parts[2];
-            return true;
-        }
+    }
+    if (parts.size() == 3 && !parts[0].empty() && !parts[1].empty() && !parts[2].empty()) {
+        src = parts[0];
+        edge = parts[1];
+        dst = parts[2];
+        return true;
     }
     return false;
 }

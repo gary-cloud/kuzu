@@ -302,11 +302,8 @@ void ExportGrapharSharedState::init([[maybe_unused]] main::ClientContext& contex
         std::string src_type = e_info->GetSrcType();
         std::string edge_type = e_info->GetEdgeType();
         std::string dst_type = e_info->GetDstType();
-        std::string full_edge_name1 = src_type + "." + edge_type + "." + dst_type;
-        std::string full_edge_name2 = src_type + ":" + edge_type + ":" + dst_type;
-        std::string full_edge_name3 = src_type + "_" + edge_type + "_" + dst_type;
-        if (full_edge_name1 == tableName || full_edge_name2 == tableName ||
-            full_edge_name3 == tableName) {
+        std::string full_edge_name = src_type + REGULAR_SEPARATOR + edge_type + REGULAR_SEPARATOR + dst_type;
+        if (full_edge_name == tableName) {
             edgeInfo = e_info;
             edgesBuilder = std::make_shared<builder::EdgesBuilder>(edgeInfo, "/tmp/",
                 AdjListType::ordered_by_source, 903, exportOptions.wopt, validateLevel);

@@ -197,94 +197,21 @@ static const std::unordered_map<LogicalTypeID,
             }},
 };
 
-static LogicalType GrapharTypeToKuzuTypeFunc(std::shared_ptr<graphar::DataType> type) {
-    graphar::Type type_id = type->id();
-    switch (type_id) {
-    case graphar::Type::BOOL:
-        return LogicalType::BOOL();
-    case graphar::Type::INT64:
-        return LogicalType::INT64();
-    case graphar::Type::INT32:
-        return LogicalType::INT32();
-    case graphar::Type::FLOAT:
-        return LogicalType::FLOAT();
-    case graphar::Type::STRING:
-        return LogicalType::STRING();
-    case graphar::Type::DOUBLE:
-        return LogicalType::DOUBLE();
-    case graphar::Type::DATE:
-        return LogicalType::DATE();
-    case graphar::Type::TIMESTAMP:
-        return LogicalType::TIMESTAMP();
-    case graphar::Type::LIST: {
-        auto value_type_id = type->value_type()->id();
-        switch (value_type_id) {
-        case graphar::Type::BOOL:
-            return LogicalType::LIST(LogicalType::BOOL());
-        case graphar::Type::INT64:
-            return LogicalType::LIST(LogicalType::INT64());
-        case graphar::Type::INT32:
-            return LogicalType::LIST(LogicalType::INT32());
-        case graphar::Type::FLOAT:
-            return LogicalType::LIST(LogicalType::FLOAT());
-        case graphar::Type::STRING:
-            return LogicalType::LIST(LogicalType::STRING());
-        case graphar::Type::DOUBLE:
-            return LogicalType::LIST(LogicalType::DOUBLE());
-        case graphar::Type::DATE:
-            return LogicalType::LIST(LogicalType::DATE());
-        case graphar::Type::TIMESTAMP:
-            return LogicalType::LIST(LogicalType::TIMESTAMP());
-        default:
-            throw NotImplementedException{"GraphAr's List Type with value type " +
-                                          std::to_string(static_cast<int>(value_type_id)) +
-                                          " is not implemented."};
-        }
-    }
-    default:
-        throw NotImplementedException{
-            "GraphAr's Type " + std::to_string(static_cast<int>(type_id)) + " is not implemented."};
-    }
-}
-
 static void autoDetectVertexSchema([[maybe_unused]] main::ClientContext* context,
     std::shared_ptr<graphar::GraphInfo> graph_info, std::string table_name,
     std::vector<LogicalType>& types, std::vector<std::string>& names) {
-    auto vertex_info = graph_info->GetVertexInfo(table_name);
-    if (!vertex_info) {
-        throw BinderException("GraphAr's Type " + table_name + " does not exist as vertex.");
+    auto vertexInfo = graph_info->GetVertexInfo(table_name);
+    if (!vertexInfo) {
+        throw BinderException("GraphAr's VertexInfo " + table_name + " does not exist as vertex.");
     }
 
     // Construct the types and names from the vertex info.
-    for (auto& property_group : vertex_info->GetPropertyGroups()) {
+    for (auto& property_group : vertexInfo->GetPropertyGroups()) {
         for (const auto& property : property_group->GetProperties()) {
             names.push_back(property.name);
-            types.push_back(GrapharTypeToKuzuTypeFunc(property.type));
+            types.push_back(grapharTypeToKuzuType(property.type));
         }
     }
-}
-
-static bool tryParseEdgeTableName(const std::string& table_name, std::string& src,
-    std::string& edge, std::string& dst) {
-    // Try '.' then ':' then '_'
-    std::vector<char> seps = {'.', ':', '_'};
-    for (char sep : seps) {
-        std::vector<std::string> parts;
-        size_t start = 0;
-        for (size_t i = 0; i <= table_name.size(); ++i) {
-            if (i == table_name.size() || table_name[i] == sep) {
-                parts.push_back(table_name.substr(start, i - start));
-                start = i + 1;
-            }
-        }
-        if (parts.size() == 3 && !parts[0].empty() && !parts[1].empty() && !parts[2].empty()) {
-            src = parts[0];
-            edge = parts[1];
-            dst = parts[2];
-            return true;
-        }
-    }
-    return false;
 }
 
 static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context,
@@ -299,8 +226,8 @@ static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context,
     }
 
     // Use GraphInfo to get EdgeInfo
-    auto edge_info = graph_info->GetEdgeInfo(src_type, edge_type, dst_type);
-    if (!edge_info) {
+    auto edgeInfo = graph_info->GetEdgeInfo(src_type, edge_type, dst_type);
+    if (!edgeInfo) {
         throw BinderException("GraphAr's EdgeInfo does not exist for " + table_name +
                               " (parsed as " + src_type + "." + edge_type + "." + dst_type + ").");
     }
@@ -342,10 +269,10 @@ static void autoDetectEdgeSchema([[maybe_unused]] main::ClientContext* context,
     types.push_back(LogicalType::INT64());
 
     // Add the edge properties except from/to
-    for (auto& property_group : edge_info->GetPropertyGroups()) {
+    for (auto& property_group : edgeInfo->GetPropertyGroups()) {
         for (const auto& property : property_group->GetProperties()) {
             names.push_back(property.name);
-            types.push_back(GrapharTypeToKuzuTypeFunc(property.type));
+            types.push_back(grapharTypeToKuzuType(property.type));
         }
     }
 }
@@ -462,22 +389,51 @@ std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     std::vector<LogicalType> column_types;
     std::vector<std::string> column_names;
     std::unordered_map<std::string, std::string> edges_from_to_mapping;
-    bool is_edge = false;
+    bool is_edge;
+
+    auto vertex_infos = graph_info->GetVertexInfos();
+    auto edge_infos = graph_info->GetEdgeInfos();
 
     // Try vertex first
-    try {
-        autoDetectVertexSchema(context, graph_info, table_name, column_types, column_names);
-        is_edge = false;
-    } catch (BinderException&) {
-        // not a vertex, try edge
-        column_types.clear();
-        column_names.clear();
-        edges_from_to_mapping.clear();
-        autoDetectEdgeSchema(context, graph_info, table_name, column_types, column_names,
-            edges_from_to_mapping);
-        is_edge = true;
+    for (const auto& v_info : vertex_infos) {
+        if (v_info->GetType() == table_name) {
+            autoDetectVertexSchema(context, graph_info, table_name, column_types, column_names);
+            is_edge = false;
+            goto TAIL;
+        }
     }
 
+    // Try edge if not vertex
+    for (const auto& e_info : edge_infos) {
+        std::string src_type = e_info->GetSrcType();
+        std::string edge_type = e_info->GetEdgeType();
+        std::string dst_type = e_info->GetDstType();
+        std::string full_edge_name1 = src_type + "." + edge_type + "." + dst_type;
+        std::string full_edge_name2 = src_type + ":" + edge_type + ":" + dst_type;
+        std::string full_edge_name3 = src_type + "_" + edge_type + "_" + dst_type;
+        if (full_edge_name1 == table_name || full_edge_name2 == table_name ||
+            full_edge_name3 == table_name) {
+            autoDetectEdgeSchema(context, graph_info, table_name, column_types, column_names,
+                edges_from_to_mapping);
+            is_edge = true;
+            goto TAIL;
+        }
+    }
+
+    // try {
+    //     autoDetectVertexSchema(context, graph_info, table_name, column_types, column_names);
+    //     is_edge = false;
+    // } catch (BinderException&) {
+    //     // not a vertex, try edge
+    //     column_types.clear();
+    //     column_names.clear();
+    //     edges_from_to_mapping.clear();
+    //     autoDetectEdgeSchema(context, graph_info, table_name, column_types, column_names,
+    //         edges_from_to_mapping);
+    //     is_edge = true;
+    // }
+
+TAIL:
     KU_ASSERT(column_types.size() == column_names.size());
 
     column_names = TableFunction::extractYieldVariables(column_names, input->yieldVariables);

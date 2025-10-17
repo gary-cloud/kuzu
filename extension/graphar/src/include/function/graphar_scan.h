@@ -14,8 +14,10 @@
 #include "function/table/bind_input.h"
 #include "function/table/scan_file_function.h"
 #include "function/table/table_function.h"
-#include "graphar/api/high_level_reader.h"
 #include "main/client_context.h"
+
+#include "graphar/api/high_level_reader.h"
+#include "utils/graphar_utils.h"
 
 namespace kuzu {
 namespace graphar_extension {

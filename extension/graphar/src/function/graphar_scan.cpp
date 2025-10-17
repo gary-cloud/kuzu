@@ -61,34 +61,20 @@ std::unique_ptr<TableFuncSharedState> initGrapharScanSharedState(
     } else {
         // parse table_name into src.edge.dst
         std::string src, edge, dst;
-        auto tryParse = [&](const std::string& tn) {
-            std::vector<char> seps = {'.', ':', '_'};
-            for (char sep : seps) {
-                std::vector<std::string> parts;
-                size_t start = 0;
-                for (size_t i = 0; i <= tn.size(); ++i) {
-                    if (i == tn.size() || tn[i] == sep) {
-                        parts.push_back(tn.substr(start, i - start));
-                        start = i + 1;
-                    }
-                }
-                if (parts.size() == 3) {
-                    src = parts[0];
-                    edge = parts[1];
-                    dst = parts[2];
-                    return true;
-                }
-            }
-            return false;
-        };
-        if (tryParse(grapharScanBindData->table_name)) {
-            maybe_edges_collection = graphar::EdgesCollection::Make(grapharScanBindData->graph_info,
-                src, edge, dst, graphar::AdjListType::ordered_by_source);
-            maybe_from_vertices_collection =
-                graphar::VerticesCollection::Make(grapharScanBindData->graph_info, src);
-            maybe_to_vertices_collection =
-                graphar::VerticesCollection::Make(grapharScanBindData->graph_info, dst);
+        if (!tryParseEdgeTableName(grapharScanBindData->table_name, src, edge, dst)) {
+            throw BinderException(
+                "Edge table name " + grapharScanBindData->table_name +
+                " is invalid. It should be in the format of "
+                "<source>.<edge>.<destination> or <source>:<edge>:<destination> or "
+                "<source>_<edge>_<destination>.");
         }
+
+        maybe_edges_collection = graphar::EdgesCollection::Make(grapharScanBindData->graph_info,
+            src, edge, dst, graphar::AdjListType::ordered_by_source);
+        maybe_from_vertices_collection =
+            graphar::VerticesCollection::Make(grapharScanBindData->graph_info, src);
+        maybe_to_vertices_collection =
+            graphar::VerticesCollection::Make(grapharScanBindData->graph_info, dst);
     }
     return std::make_unique<graphar_extension::GrapharScanSharedState>(
         std::move(maybe_vertices_collection), std::move(maybe_edges_collection),

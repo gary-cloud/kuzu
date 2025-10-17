@@ -1,0 +1,9 @@
+-DATASET CSV empty
+
+--
+
+-CASE ScanGrapharForgotToLoadExtension
+-SKIP_STATIC_LINK
+-STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/extension/graphar/test/graphar_data/ldbc_sample/parquet/ldbc_sample.graph.yml'(file_format='graphar', table_name='person') RETURN *
+---- error
+Binder exception: Cannot load from file type graphar. If this file type is part of a kuzu extension please load the extension then try again

@@ -50,11 +50,12 @@ void sinkFunc(ExportFuncSharedState&, ExportFuncLocalState& localState,
     // number of logical rows in this batch (selection size)
     size_t num_rows = inputVectors[0]->state->getSelSize();
 
-    // optional check
+    // optional length check for different columns (consistent when all vectors are flat)
+    // TODO(gary): consider unflat vectors
     for (size_t c = 1; c < inputVectors.size(); ++c) {
         if (inputVectors[c]->state->getSelSize() != num_rows) {
             throw common::RuntimeException(
-                common::stringFormat("inconsistent column lengths: %zu vs %zu", num_rows,
+                common::stringFormat("inconsistent column lengths: {} vs {}", num_rows,
                     inputVectors[c]->state->getSelSize()));
         }
     }

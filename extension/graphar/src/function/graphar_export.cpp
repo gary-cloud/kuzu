@@ -47,18 +47,29 @@ void sinkFunc(ExportFuncSharedState&, ExportFuncLocalState& localState,
     if (inputVectors.size() != schema.size()) {
         throw common::RuntimeException("inputVectors size != schema size");
     }
-    // number of logical rows in this batch (selection size)
-    size_t num_rows = inputVectors[0]->state->getSelSize();
 
-    // optional length check for different columns (consistent when all vectors are flat)
-    // TODO(gary): consider unflat vectors
-    for (size_t c = 1; c < inputVectors.size(); ++c) {
-        if (inputVectors[c]->state->getSelSize() != num_rows) {
-            throw common::RuntimeException(
-                common::stringFormat("inconsistent column lengths: {} vs {}", num_rows,
-                    inputVectors[c]->state->getSelSize()));
+    // Compute the number of logical rows in the current batch (supporting mixed flat / unflat vectors)
+    // A flat vector is treated as selSize = 1 (broadcasted),
+    // while an unflat vector uses its own selSize.
+    size_t num_rows = 1;
+    for (size_t c = 0; c < inputVectors.size(); ++c) {
+        auto& v = inputVectors[c];
+        if (!v->state->isFlat()) {
+            auto s = static_cast<size_t>(v->state->getSelVector().getSelSize());
+            if (s > num_rows) {
+                num_rows = s;
+            }
         }
     }
+
+    // Optional: if prefer a fail-fast policy for inconsistent non-flat columns,
+    // you can disable the “max” strategy above and instead check that all non-flat
+    // columns have the same selSize, throwing an exception otherwise. Example:
+    //   size_t expected = 0;
+    //   for (...) if (!v->state->isFlat()) { if (expected==0) expected = s; else if (expected != s)
+    //   throw ...; }
+    // The current implementation adopts a pad-null strategy to improve robustness
+    // and compatibility.
 
     for (size_t logicalRow = 0; logicalRow < num_rows; ++logicalRow) {
         size_t rid = buffer->NewRow();
@@ -66,8 +77,22 @@ void sinkFunc(ExportFuncSharedState&, ExportFuncLocalState& localState,
         for (size_t col = 0; col < schema.size(); ++col) {
             const auto& meta = schema[col];
             auto& vecPtr = inputVectors[col];
-            // map logical -> physical position using selection vector
-            uint32_t physPos = vecPtr->state->getSelVector()[logicalRow];
+
+            // If the vector is flat: always use sel[0].
+            // If unflat: use sel[logicalRow] if logicalRow < selSize,
+            // otherwise treat as missing (null).
+            uint32_t physPos = 0;
+            if (vecPtr->state->isFlat()) {
+                physPos = vecPtr->state->getSelVector()[0];
+            } else {
+                auto selSize = static_cast<size_t>(vecPtr->state->getSelVector().getSelSize());
+                if (logicalRow >= selSize) {
+                    // pad-null: this column has no value for the current logicalRow,
+                    // leave as monostate (not written).
+                    continue;
+                }
+                physPos = vecPtr->state->getSelVector()[logicalRow];
+            }
 
             // use physical position to check for null
             if (vecPtr->isNull(physPos)) {
@@ -128,12 +153,6 @@ void combineFunc(ExportFuncSharedState& sharedState, ExportFuncLocalState& local
         }
         return std::nullopt;
     };
-
-    // Candidate names for edge endpoints
-    const std::vector<std::string> srcCandidates = {"src", "source", "from", "src_id", "srcId",
-        "source_id"};
-    const std::vector<std::string> dstCandidates = {"dst", "dest", "target", "to", "dst_id",
-        "dstId", "target_id"};
 
     // If exporting edges, try to locate src/dst indices once before looping.
     std::optional<size_t> srcIdxOpt, dstIdxOpt;
@@ -352,8 +371,14 @@ void ExportGrapharSharedState::init([[maybe_unused]] main::ClientContext& contex
             src_type + REGULAR_SEPARATOR + edge_type + REGULAR_SEPARATOR + dst_type;
         if (full_edge_name == tableName) {
             edgeInfo = e_info;
+            // edgesBuilder = std::make_shared<builder::EdgesBuilder>(edgeInfo, targetDir,
+            //     AdjListType::ordered_by_source, 903, exportOptions.wopt, validateLevel);
             edgesBuilder = std::make_shared<builder::EdgesBuilder>(edgeInfo, targetDir,
-                AdjListType::ordered_by_source, 903, exportOptions.wopt, validateLevel);
+                AdjListType::ordered_by_source, 903);
+            graphar::WriterOptions::ParquetOptionBuilder parquetOptionBuilder;
+            parquetOptionBuilder.compression(arrow::Compression::ZSTD);
+            edgesBuilder->SetWriterOptions(parquetOptionBuilder.build());
+            edgesBuilder->SetValidateLevel(validateLevel);
             is_edge = true;
             return;
         }

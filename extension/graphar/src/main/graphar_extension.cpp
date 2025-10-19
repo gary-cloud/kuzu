@@ -2,6 +2,7 @@
 
 #include "function/graphar_export.h"
 #include "function/graphar_scan.h"
+#include "function/graphar_metadata.h"
 #include "main/client_context.h"
 #include "main/database.h"
 
@@ -11,6 +12,7 @@ namespace graphar_extension {
 void GrapharExtension::load(main::ClientContext* context) {
     auto& db = *context->getDatabase();
     extension::ExtensionUtils::addTableFunc<GrapharScanFunction>(db);
+    extension::ExtensionUtils::addTableFunc<GrapharMetadataFunction>(db);
     extension::ExtensionUtils::addScalarFunc<GrapharExportFunction>(db);
 }
 

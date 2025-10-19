@@ -146,9 +146,11 @@ offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
         auto it = grapharSharedState->edge_batch_iters[batch_id];
         for (size_t idx = start; idx < end; ++idx) {
             for (size_t ci = 0; ci < column_setters.size(); ++ci) {
-                if (column_names[ci] == "from") {
+                if (StringUtils::caseInsensitiveEquals(column_names[ci], FROM_COL_NAME) ||
+                    StringUtils::caseInsensitiveEquals(column_names[ci], INTERNAL_FROM_COL_NAME)) {
                     column_setters[ci](it, output, count, from_vertices); // from setter
-                } else if (column_names[ci] == "to") {
+                } else if (StringUtils::caseInsensitiveEquals(column_names[ci], TO_COL_NAME) ||
+                           StringUtils::caseInsensitiveEquals(column_names[ci], INTERNAL_TO_COL_NAME)) {
                     column_setters[ci](it, output, count, to_vertices); // to setter
                 } else {
                     column_setters[ci](it, output, count, nullptr); // other setter

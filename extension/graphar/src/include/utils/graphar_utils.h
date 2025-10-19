@@ -14,6 +14,17 @@ using namespace graphar;
 #define SEPARATOR '_'
 #define DEFAULT_GRAPHAR_LABEL ".graphar"
 #define DEFAULT_TARGET_DIR "/tmp/"
+#define FROM_COL_NAME "from"
+#define TO_COL_NAME "to"
+#define INTERNAL_ID_COL_NAME "internal_id"
+#define INTERNAL_FROM_COL_NAME "internal_from"
+#define INTERNAL_TO_COL_NAME "internal_to"
+
+// Candidate names for edge endpoints
+const std::vector<std::string> srcCandidates = {"src", "source", "from", "src_id", "srcId",
+    "source_id", "internal_from", "internalFrom"};
+const std::vector<std::string> dstCandidates = {"dst", "dest", "target", "to", "dst_id",
+    "dstId", "target_id", "internal_to", "internalTo"};
 
 /**
  * Get the first token from a string separated by '-'.

@@ -441,22 +441,6 @@ ExportGrapharBindData::ExportGrapharBindData(std::vector<std::string> columnName
     }
 }
 
-// ExportGrapharBindData::ExportGrapharBindData(std::vector<std::string> columnNames,
-//     std::vector<LogicalType> columnTypes, std::string fileName,
-//     GrapharExportOptions grapharExportOptions, std::string tableName, std::string targetDir, ValidateLevel
-//     validateLevel) : ExportFuncBindData(std::move(columnNames), std::move(fileName)),
-//       exportOptions(std::move(grapharExportOptions)), tableName(std::move(tableName)),
-//       targetDir(std::move(targetDir)), validateLevel(validateLevel) {
-//     auto absolute_path = this->fileName;
-//     // Load graph info from the file path
-//     graphInfo = graphar::GraphInfo::Load(absolute_path).value();
-//     if (!graphInfo) {
-//         throw BinderException("GraphAr's GraphInfo could not be loaded from " + absolute_path);
-//     }
-
-//     setDataType(std::move(columnTypes));
-// }
-
 std::unique_ptr<ExportFuncBindData> bindFunc(ExportFuncBindInput& bindInput) {
     GrapharExportOptions grapharExportOptions{bindInput.parsingOptions};
     // get table name.

@@ -1,8 +1,8 @@
 #pragma once
 
+#include "common/exception/not_implemented.h"
 #include "common/string_utils.h"
 #include "common/types/types.h"
-#include "common/exception/not_implemented.h"
 #include "graphar/types.h"
 
 namespace kuzu {
@@ -23,8 +23,8 @@ using namespace graphar;
 // Candidate names for edge endpoints
 const std::vector<std::string> srcCandidates = {"src", "source", "from", "src_id", "srcId",
     "source_id", "internal_from", "internalFrom"};
-const std::vector<std::string> dstCandidates = {"dst", "dest", "target", "to", "dst_id",
-    "dstId", "target_id", "internal_to", "internalTo"};
+const std::vector<std::string> dstCandidates = {"dst", "dest", "target", "to", "dst_id", "dstId",
+    "target_id", "internal_to", "internalTo"};
 
 /**
  * Get the first token from a string separated by '-'.
@@ -63,15 +63,15 @@ bool parse_is_edge(const std::string& path);
  *  - Return: true  -> if the table name was successfully parsed as "src.edge.dst" format
  *            false -> if the table name does not match the expected format
  *
- * This function attempts to parse a table name using multiple separator character '_'. 
+ * This function attempts to parse a table name using multiple separator character '_'.
  * It expects exactly 3 non-empty parts in the format:
  *   [source_vertex_label][separator][edge_label][separator][destination_vertex_label]
  *
  * Examples of valid inputs:
  *   - "page_likes_page"       -> src="page", edge="likes", dst="page"
  */
-bool tryParseEdgeTableName(const std::string& table_name, std::string& src,
-    std::string& edge, std::string& dst);
+bool tryParseEdgeTableName(const std::string& table_name, std::string& src, std::string& edge,
+    std::string& dst);
 
 /*
  * Convert GraphAr data type to Kuzu logical type.

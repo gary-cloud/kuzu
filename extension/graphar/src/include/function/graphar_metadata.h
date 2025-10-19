@@ -81,8 +81,8 @@ struct GrapharMetadataSharedState : public TableFuncSharedState {
 std::unique_ptr<function::TableFuncSharedState> initGrapharMetadataSharedState(
     const function::TableFuncInitSharedStateInput& input);
 
-std::unique_ptr<TableFuncBindData>
-metadataBindFunc(main::ClientContext* context, const TableFuncBindInput* input);
+std::unique_ptr<TableFuncBindData> metadataBindFunc(main::ClientContext* context,
+    const TableFuncBindInput* input);
 
 offset_t metadataTableFunc(const TableFuncInput& input, TableFuncOutput& output);
 

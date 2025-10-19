@@ -150,7 +150,8 @@ offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
                     StringUtils::caseInsensitiveEquals(column_names[ci], INTERNAL_FROM_COL_NAME)) {
                     column_setters[ci](it, output, count, from_vertices); // from setter
                 } else if (StringUtils::caseInsensitiveEquals(column_names[ci], TO_COL_NAME) ||
-                           StringUtils::caseInsensitiveEquals(column_names[ci], INTERNAL_TO_COL_NAME)) {
+                           StringUtils::caseInsensitiveEquals(column_names[ci],
+                               INTERNAL_TO_COL_NAME)) {
                     column_setters[ci](it, output, count, to_vertices); // to setter
                 } else {
                     column_setters[ci](it, output, count, nullptr); // other setter

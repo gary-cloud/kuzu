@@ -291,8 +291,8 @@ struct ExportGrapharBindData : public ExportFuncBindData {
     ValidateLevel validateLevel;
 
     ExportGrapharBindData(std::vector<std::string> columnNames, const std::string& fileName,
-        GrapharExportOptions grapharWriterOptions, std::string tableName,
-        std::string targetDir, ValidateLevel validateLevel);
+        GrapharExportOptions grapharWriterOptions, std::string tableName, std::string targetDir,
+        ValidateLevel validateLevel);
 
     std::unique_ptr<ExportFuncBindData> copy() const override {
         return std::make_unique<ExportGrapharBindData>(columnNames, fileName, exportOptions,

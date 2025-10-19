@@ -48,9 +48,9 @@ void sinkFunc(ExportFuncSharedState&, ExportFuncLocalState& localState,
         throw common::RuntimeException("inputVectors size != schema size");
     }
 
-    // Compute the number of logical rows in the current batch (supporting mixed flat / unflat vectors)
-    // A flat vector is treated as selSize = 1 (broadcasted),
-    // while an unflat vector uses its own selSize.
+    // Compute the number of logical rows in the current batch (supporting mixed flat / unflat
+    // vectors) A flat vector is treated as selSize = 1 (broadcasted), while an unflat vector uses
+    // its own selSize.
     size_t num_rows = 1;
     for (size_t c = 0; c < inputVectors.size(); ++c) {
         auto& v = inputVectors[c];

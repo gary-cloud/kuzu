@@ -281,8 +281,9 @@ offset_t metadataTableFunc(const TableFuncInput& input, TableFuncOutput& output)
         for (const auto& group : property_groups) {
             const auto& properties = group->GetProperties();
             for (const auto& property : properties) {
-                std::string property_str = property.name + METADATA_SEPARATOR + property.type->ToTypeName() +
-                                           METADATA_SEPARATOR + (property.is_primary ? "true" : "false");
+                std::string property_str = property.name + METADATA_SEPARATOR +
+                                           property.type->ToTypeName() + METADATA_SEPARATOR +
+                                           (property.is_primary ? "true" : "false");
                 StringVector::addString(property_names_data_vec, propertyResultList.offset,
                     property_str);
                 propertyResultList.offset++;
@@ -348,8 +349,9 @@ offset_t metadataTableFunc(const TableFuncInput& input, TableFuncOutput& output)
         for (const auto& group : property_groups) {
             const auto& properties = group->GetProperties();
             for (const auto& property : properties) {
-                std::string property_str = property.name + METADATA_SEPARATOR + property.type->ToTypeName() +
-                                           METADATA_SEPARATOR + (property.is_primary ? "true" : "false");
+                std::string property_str = property.name + METADATA_SEPARATOR +
+                                           property.type->ToTypeName() + METADATA_SEPARATOR +
+                                           (property.is_primary ? "true" : "false");
                 StringVector::addString(property_names_data_vec, propertyResultList.offset,
                     property_str);
                 propertyResultList.offset++;

@@ -26,6 +26,9 @@ using namespace kuzu::function;
 using namespace kuzu::common;
 
 #define METADATA_SEPARATOR "|"
+#define GRAPH_METADATA_COLUMN_NUM 7
+#define VERTEX_METADATA_COLUMN_NUM 6
+#define EDGE_METADATA_COLUMN_NUM 11
 
 enum class GrapharMetadataType {
     GRAPH,

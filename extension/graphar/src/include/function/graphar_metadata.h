@@ -1,7 +1,5 @@
 #pragma once
 
-#include <mutex>
-
 #include "binder/binder.h"
 #include "common/case_insensitive_map.h"
 #include "common/copy_constructors.h"

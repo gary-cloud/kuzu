@@ -41,6 +41,12 @@ std::unique_ptr<PhysicalPlan> PlanMapper::getPhysicalPlan(const LogicalPlan* log
     return physicalPlan;
 }
 
+std::unique_ptr<PhysicalPlan> PlanMapper::mapLogicalPlanToPhysical(
+    const LogicalPlan* logicalPlan, const expression_vector& expressionsToCollect) {
+    return getPhysicalPlan(
+        logicalPlan, expressionsToCollect, main::QueryResultType::FTABLE, ArrowResultConfig{});
+}
+
 std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator* logicalOperator) {
     std::unique_ptr<PhysicalOperator> physicalOperator;
     switch (logicalOperator->getOperatorType()) {

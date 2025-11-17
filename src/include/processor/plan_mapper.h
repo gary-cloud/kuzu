@@ -64,6 +64,9 @@ public:
         const binder::expression_vector& expressions, main::QueryResultType resultType,
         common::ArrowResultConfig arrowConfig);
 
+    std::unique_ptr<PhysicalPlan> mapLogicalPlanToPhysical(const planner::LogicalPlan* logicalPlan,
+        const binder::expression_vector& expressionsToCollect);
+
     uint32_t getOperatorID() { return physicalOperatorID++; }
 
     static DataPos getDataPos(const binder::Expression& expression, const planner::Schema& schema) {

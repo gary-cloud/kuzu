@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 // ANTLR4 generates code with unused parameters.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"

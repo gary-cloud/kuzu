@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 
 #include "binder/expression_visitor.h"
@@ -138,6 +139,13 @@ LogicalPlan Planner::planQueryGraph(const QueryGraph& queryGraph,
     }
 
     auto& plans = context.getPlans(context.getFullyMatchedSubqueryGraph());
+    lastEnumeratedPlans.clear();
+    lastEnumeratedPlans.reserve(plans.size());
+    for (auto& plan : plans) {
+        lastEnumeratedPlans.push_back(plan.copy());
+    }
+    std::sort(lastEnumeratedPlans.begin(), lastEnumeratedPlans.end(),
+        [](const LogicalPlan& lhs, const LogicalPlan& rhs) { return lhs.getCost() < rhs.getCost(); });
     auto bestIdx = 0;
     for (auto i = 1u; i < plans.size(); ++i) {
         if (plans[i].getCost() < plans[bestIdx].getCost()) {

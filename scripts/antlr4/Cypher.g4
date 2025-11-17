@@ -202,6 +202,8 @@ THEN : ( 'T' | 't' ) ( 'H' | 'h' ) ( 'E' | 'e' ) ( 'N' | 'n' ) ;
 
 TO : ( 'T' | 't' ) ( 'O' | 'o' ) ;
 
+TOP : ( 'T' | 't' ) ( 'O' | 'o' ) ( 'P' | 'p' ) ;
+
 TRAIL : ( 'T' | 't' ) ( 'R' | 'r' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'L' | 'l' ) ;
 
 TRANSACTION : ( 'T' | 't' ) ( 'R' | 'r' ) ( 'A' | 'a' ) ( 'N' | 'n' ) ( 'S' | 's' ) ( 'A' | 'a' ) ( 'C' | 'c' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ;
@@ -471,7 +473,7 @@ oC_AnyCypherOption
         | oC_Profile ;
 
 oC_Explain
-    : EXPLAIN (SP LOGICAL)? ;
+    : EXPLAIN (SP TOP SP oC_IntegerLiteral)? (SP LOGICAL)? ;
 
 oC_Profile
     : PROFILE ;
@@ -1018,6 +1020,7 @@ kU_NonReservedKeywords
         | STRUCT
         | L_SKIP
         | LIMIT
+        | TOP
         | TRANSACTION
         | TYPE
         | USE

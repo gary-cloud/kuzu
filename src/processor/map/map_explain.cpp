@@ -1,4 +1,7 @@
 #include "common/profiler.h"
+#include <algorithm>
+#include <sstream>
+#include "main/client_context.h"
 #include "main/plan_printer.h"
 #include "planner/operator/logical_explain.h"
 #include "planner/operator/logical_plan.h"
@@ -35,6 +38,22 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExplain(const LogicalOperator* 
         auto profiler = std::make_unique<Profiler>();
         auto explainStr = main::PlanPrinter::printPlanToOstream(plan.get(), profiler.get()).str();
         FactorizedTableUtils::appendStringToTable(messageTable.get(), explainStr, memoryManager);
+        return std::make_unique<DummySimpleSink>(std::move(messageTable), getOperatorID());
+    }
+    if (logicalExplain.getExplainType() == ExplainType::LOGICAL_PLAN &&
+        logicalExplain.hasCandidatePlans()) {
+        std::ostringstream builder;
+        const auto& candidates = logicalExplain.getCandidatePlans();
+        auto planCount = std::min<uint64_t>(logicalExplain.getTopK(), candidates.size());
+        for (auto i = 0u; i < planCount; ++i) {
+            builder << "Plan #" << (i + 1) << " (cost = " << candidates[i].getCost() << ")\n";
+            auto planCopy = candidates[i].copy();
+            builder << main::PlanPrinter::printPlanToOstream(&planCopy).str();
+            if (i + 1 < planCount) {
+                builder << "\n";
+            }
+        }
+        FactorizedTableUtils::appendStringToTable(messageTable.get(), builder.str(), memoryManager);
         return std::make_unique<DummySimpleSink>(std::move(messageTable), getOperatorID());
     }
     auto plan = LogicalPlan();

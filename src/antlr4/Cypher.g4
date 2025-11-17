@@ -224,7 +224,7 @@ oC_AnyCypherOption
         | oC_Profile ;
 
 oC_Explain
-    : EXPLAIN (SP LOGICAL)? ;
+    : EXPLAIN (SP TOP SP oC_IntegerLiteral)? (SP LOGICAL)? ;
 
 oC_Profile
     : PROFILE ;
@@ -771,6 +771,7 @@ kU_NonReservedKeywords
         | STRUCT
         | L_SKIP
         | LIMIT
+        | TOP
         | TRANSACTION
         | TYPE
         | USE

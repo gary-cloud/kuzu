@@ -50,6 +50,14 @@
 -STATEMENT EXPLAIN LOGICAL MATCH (p:npytable) RETURN p.id
 ---- ok
 
+-LOG ExplainLogicalTopK
+-STATEMENT EXPLAIN TOP 2 LOGICAL MATCH (p1:person)-[e:knows]->(p2:person) RETURN *
+---- ok
+
+-LOG ExplainLogicalTopKZero
+-STATEMENT EXPLAIN TOP 0 LOGICAL MATCH (p:person) RETURN p
+---- error
+
 -LOG ProfileDDL
 -STATEMENT Profile create node table npytable2 (id INT64,i32 INT32, PRIMARY KEY(id));
 ---- ok

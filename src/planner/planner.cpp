@@ -1,5 +1,7 @@
 #include "planner/planner.h"
 
+#include <algorithm>
+
 #include "main/client_context.h"
 #include "main/database.h"
 
@@ -59,6 +61,7 @@ Planner::Planner(main::ClientContext* clientContext)
       plannerExtensions{clientContext->getDatabase()->getPlannerExtensions()} {}
 
 LogicalPlan Planner::planStatement(const BoundStatement& statement) {
+    lastEnumeratedPlans.clear();
     switch (statement.getStatementType()) {
     case StatementType::QUERY: {
         return planQuery(statement);
@@ -123,6 +126,19 @@ LogicalPlan Planner::planStatement(const BoundStatement& statement) {
     default:
         KU_UNREACHABLE;
     }
+}
+
+std::vector<LogicalPlan> Planner::getTopLogicalPlans(uint64_t limit) const {
+    std::vector<LogicalPlan> result;
+    if (limit == 0 || lastEnumeratedPlans.empty()) {
+        return result;
+    }
+    auto count = std::min<uint64_t>(limit, lastEnumeratedPlans.size());
+    result.reserve(count);
+    for (auto i = 0u; i < count; ++i) {
+        result.push_back(lastEnumeratedPlans[i].copy());
+    }
+    return result;
 }
 
 } // namespace planner

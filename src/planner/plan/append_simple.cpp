@@ -1,4 +1,5 @@
 #include "binder/bound_attach_database.h"
+#include <vector>
 #include "binder/bound_create_macro.h"
 #include "binder/bound_detach_database.h"
 #include "binder/bound_explain.h"
@@ -114,8 +115,14 @@ LogicalPlan Planner::planExplain(const BoundStatement& statement) {
     auto& explain = statement.constCast<BoundExplain>();
     auto statementToExplain = explain.getStatementToExplain();
     auto planToExplain = planStatement(*statementToExplain);
+    auto topK = explain.getTopK().value_or(1);
+    std::vector<LogicalPlan> candidatePlans;
+    if (explain.getExplainType() == ExplainType::LOGICAL_PLAN && topK > 1) {
+        candidatePlans = getTopLogicalPlans(topK);
+    }
     auto op = std::make_shared<LogicalExplain>(planToExplain.getLastOperator(),
-        explain.getExplainType(), statementToExplain->getStatementResult()->getColumns());
+        explain.getExplainType(), statementToExplain->getStatementResult()->getColumns(), topK,
+        std::move(candidatePlans));
     return getSimplePlan(std::move(op));
 }
 

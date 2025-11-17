@@ -20,12 +20,30 @@ std::vector<std::shared_ptr<Statement>> Transformer::transform() {
         if (oc_Statement->oC_AnyCypherOption()) {
             auto cypherOption = oc_Statement->oC_AnyCypherOption();
             auto explainType = ExplainType::PROFILE;
+            std::optional<uint64_t> topK;
             if (cypherOption->oC_Explain()) {
-                explainType = cypherOption->oC_Explain()->LOGICAL() ? ExplainType::LOGICAL_PLAN :
-                                                                      ExplainType::PHYSICAL_PLAN;
+                auto explainCtx = cypherOption->oC_Explain();
+                explainType = explainCtx->LOGICAL() ? ExplainType::LOGICAL_PLAN :
+                                                      ExplainType::PHYSICAL_PLAN;
+                if (explainCtx->TOP()) {
+                    auto integerLiteral = explainCtx->oC_IntegerLiteral();
+                    if (integerLiteral == nullptr) {
+                        throw ParserException("EXPLAIN TOP must be followed by an integer literal.");
+                    }
+                    uint64_t value;
+                    try {
+                        value = std::stoull(integerLiteral->getText());
+                    } catch (std::exception&) {
+                        throw ParserException("EXPLAIN TOP value is out of range.");
+                    }
+                    if (value == 0) {
+                        throw ParserException("EXPLAIN TOP value must be greater than 0.");
+                    }
+                    topK = value;
+                }
             }
             statements.push_back(
-                std::make_unique<ExplainStatement>(std::move(statement), explainType));
+                std::make_unique<ExplainStatement>(std::move(statement), explainType, topK));
             continue;
         }
         statements.push_back(std::move(statement));

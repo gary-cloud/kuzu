@@ -1,6 +1,7 @@
 #pragma once
 
 #include "binder/bound_statement.h"
+#include <vector>
 #include "binder/query/query_graph.h"
 #include "common/enums/accumulate_type.h"
 #include "common/enums/extend_direction.h"
@@ -340,12 +341,15 @@ public:
         const binder::SubqueryGraph& rightPrev, const binder::SubqueryGraph& new_,
         const binder::expression_vector& exprs);
 
+    std::vector<LogicalPlan> getTopLogicalPlans(uint64_t limit) const;
+
 private:
     main::ClientContext* clientContext;
     PropertyExprCollection propertyExprCollection;
     CardinalityEstimator cardinalityEstimator;
     JoinOrderEnumeratorContext context;
     std::vector<extension::PlannerExtension*> plannerExtensions;
+    std::vector<LogicalPlan> lastEnumeratedPlans;
 };
 
 } // namespace planner

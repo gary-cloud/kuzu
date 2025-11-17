@@ -34,6 +34,25 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExplain(const LogicalOperator* 
         return profile;
     }
     if (logicalExplain.getExplainType() == ExplainType::PHYSICAL_PLAN) {
+        if (logicalExplain.hasCandidatePlans()) {
+            std::ostringstream builder;
+            const auto& candidates = logicalExplain.getCandidatePlans();
+            auto planCount = std::min<uint64_t>(logicalExplain.getTopK(), candidates.size());
+            const auto innerResultColumns = logicalExplain.getInnerResultColumns();
+            for (auto i = 0u; i < planCount; ++i) {
+                builder << "Plan #" << (i + 1) << " (cost = " << candidates[i].getCost() << ")\n";
+                auto plan =
+                    mapLogicalPlanToPhysical(&candidates[i], innerResultColumns);
+                auto profiler = std::make_unique<Profiler>();
+                builder << main::PlanPrinter::printPlanToOstream(plan.get(), profiler.get()).str();
+                if (i + 1 < planCount) {
+                    builder << "\n";
+                }
+            }
+            FactorizedTableUtils::appendStringToTable(
+                messageTable.get(), builder.str(), memoryManager);
+            return std::make_unique<DummySimpleSink>(std::move(messageTable), getOperatorID());
+        }
         auto plan = std::make_unique<PhysicalPlan>(std::move(root));
         auto profiler = std::make_unique<Profiler>();
         auto explainStr = main::PlanPrinter::printPlanToOstream(plan.get(), profiler.get()).str();

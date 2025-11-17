@@ -54,6 +54,10 @@
 -STATEMENT EXPLAIN TOP 2 LOGICAL MATCH (p1:person)-[e:knows]->(p2:person) RETURN *
 ---- ok
 
+-LOG ExplainPhysicalTopK
+-STATEMENT EXPLAIN TOP 2 MATCH (p1:person)-[e:knows]->(p2:person) RETURN *
+---- ok
+
 -LOG ExplainLogicalTopKZero
 -STATEMENT EXPLAIN TOP 0 LOGICAL MATCH (p:person) RETURN p
 ---- error

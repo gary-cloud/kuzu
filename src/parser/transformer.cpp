@@ -41,6 +41,9 @@ std::vector<std::shared_ptr<Statement>> Transformer::transform() {
                     }
                     topK = value;
                 }
+                if (topK.has_value() && explainType != ExplainType::LOGICAL_PLAN) {
+                    throw ParserException("EXPLAIN TOP K is only supported for LOGICAL plan.");
+                }
             }
             statements.push_back(
                 std::make_unique<ExplainStatement>(std::move(statement), explainType, topK));
